@@ -1347,14 +1347,21 @@ ORCHESTRATOR_PROMPT = """당신은 MAS의 총괄 조율자이자 DevOps 전문�
 3. **Git 도구**:
    - git_list_repos(): 레포지토리 목록
    - git_recent_commits(repo, limit): 최근 커밋 조회
+   - git_read_file(repo_name, file_path): Git 레포지토리 파일 읽기
+   - git_show_file_changes(repo_name): Git 변경사항 확인
 
 4. **Prometheus 도구**:
    - prometheus_query(query): PromQL 쿼리 실행
    - prometheus_node_metrics(): 노드 메트릭 조회
 
-5. **파일 시스템 도구**:
+5. **파일 시스템 도구** (중요):
    - fs_read_file(file_path, max_lines): 파일 읽기
    - fs_list_directory(dir_path): 디렉토리 목록
+
+   **중요 경로**:
+   - `/app/projects/`: 모든 Git 레포지토리가 있는 폴더 (hostPath 마운트)
+     - portfolio, mas, cluster-infrastructure, jovies, todo 등 11개 레포
+   - 사용자가 "Projects 폴더" 또는 "레포지토리"를 물어보면 `/app/projects/`를 확인하세요
 
 6. **Docker 도구**:
    - docker_list_images(registry): 레지스트리 이미지 목록
