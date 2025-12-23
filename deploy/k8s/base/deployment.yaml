@@ -42,6 +42,12 @@ spec:
         # SQLAlchemy format (if needed)
         - name: DATABASE_URL
           value: "postgresql+asyncpg://bluemayne:$(POSTGRES_PASSWORD)@postgresql-primary.postgresql.svc.cluster.local:5432/mas"
+        - name: POSTGRES_HOST
+          value: "postgresql-primary.postgresql.svc.cluster.local"
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: POSTGRES_USER
+          value: "bluemayne"
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
