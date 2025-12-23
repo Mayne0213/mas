@@ -47,44 +47,47 @@ k8s_batch_v1 = client.BatchV1Api()
 k8s_networking_v1 = client.NetworkingV1Api()
 
 
-# ===== Auto-clone cluster-infrastructure repository on startup =====
-def auto_clone_infrastructure_repo():
+# ===== Configure all Git repositories on startup =====
+def configure_git_repositories():
     """
-    Automatically clone cluster-infrastructure repository on pod startup.
+    Configure Git user for all repositories in /app/projects (hostPath mount).
+    /app/projects is mounted from host /home/ubuntu/Projects.
     """
-    repo_url = os.getenv("INFRA_REPO_URL", "https://gitea0213.kro.kr/bluemayne/cluster-infrastructure.git")
-    repo_path = "/app/repos/cluster-infrastructure"
+    projects_path = "/app/projects"
 
-    if os.path.exists(repo_path):
-        print(f"✅ cluster-infrastructure already exists at {repo_path}")
-        # Pull latest changes
-        try:
-            subprocess.run(["git", "-C", repo_path, "pull"], timeout=30, check=True)
-            print("✅ Pulled latest changes from cluster-infrastructure")
-        except Exception as e:
-            print(f"⚠️ Failed to pull: {e}")
+    if not os.path.exists(projects_path):
+        print(f"⚠️ Projects directory not found at {projects_path}")
+        print("   Make sure hostPath volume is mounted correctly")
         return
 
     try:
-        os.makedirs("/app/repos", exist_ok=True)
+        # Configure git user for all repositories
+        repos = [d for d in os.listdir(projects_path)
+                if os.path.isdir(os.path.join(projects_path, d)) and
+                   os.path.exists(os.path.join(projects_path, d, ".git"))]
 
-        # Use Gitea token if available
-        token = os.getenv("GITEA_TOKEN", "")
-        if token and "gitea0213.kro.kr" in repo_url:
-            repo_url = repo_url.replace("https://", f"https://{token}@")
+        if not repos:
+            print(f"⚠️ No git repositories found in {projects_path}")
+            return
 
-        subprocess.run(["git", "clone", repo_url, repo_path], timeout=60, check=True)
+        for repo in repos:
+            repo_path = os.path.join(projects_path, repo)
+            try:
+                subprocess.run(["git", "-C", repo_path, "config", "user.name", "mas-agent"],
+                             timeout=5, check=True, capture_output=True)
+                subprocess.run(["git", "-C", repo_path, "config", "user.email", "mas-agent@mas.local"],
+                             timeout=5, check=True, capture_output=True)
+                print(f"✅ Configured Git for: {repo}")
+            except Exception as e:
+                print(f"⚠️ Failed to configure Git for {repo}: {e}")
 
-        # Configure git user
-        subprocess.run(["git", "-C", repo_path, "config", "user.name", "mas-agent"], timeout=5)
-        subprocess.run(["git", "-C", repo_path, "config", "user.email", "mas-agent@mas.local"], timeout=5)
+        print(f"✅ Git configuration complete for {len(repos)} repositories")
 
-        print(f"✅ Successfully cloned cluster-infrastructure to {repo_path}")
     except Exception as e:
-        print(f"❌ Failed to clone cluster-infrastructure: {e}")
+        print(f"❌ Failed to configure Git repositories: {e}")
 
-# Auto-clone on module import
-auto_clone_infrastructure_repo()
+# Configure git on module import
+configure_git_repositories()
 
 
 # ===== MCP Tools =====
@@ -443,15 +446,15 @@ def git_create_file(repo_name: str, file_path: str, content: str, commit_message
     """
     Create or update a file in a Git repository and commit it.
     Args:
-        repo_name: Repository name (must be cloned first)
+        repo_name: Repository name (e.g., cluster-infrastructure, mas, etc.)
         file_path: File path relative to repo root
         content: File content
         commit_message: Commit message (default: "Add/Update {file_path}")
     """
     try:
-        repo_path = f"/app/repos/{repo_name}"
+        repo_path = f"/app/projects/{repo_name}"
         if not os.path.exists(repo_path):
-            return f"❌ Repository not found: {repo_path}. Use git_clone_repo first."
+            return f"❌ Repository not found: {repo_path}. Available repos in /app/projects."
         
         full_path = os.path.join(repo_path, file_path)
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
@@ -483,11 +486,11 @@ def git_push(repo_name: str, branch: str = "main") -> str:
     """
     Push commits to remote repository.
     Args:
-        repo_name: Repository name
+        repo_name: Repository name (e.g., cluster-infrastructure, mas, etc.)
         branch: Branch name (default: main)
     """
     try:
-        repo_path = f"/app/repos/{repo_name}"
+        repo_path = f"/app/projects/{repo_name}"
         if not os.path.exists(repo_path):
             return f"❌ Repository not found: {repo_path}"
         
@@ -979,13 +982,13 @@ def yaml_deploy_application(
     try:
         import yaml as yaml_lib
 
-        repo_path = "/app/repos/cluster-infrastructure"
+        repo_path = "/app/projects/cluster-infrastructure"
         app_path = f"applications/{app_name}"
         results = []
 
         # Ensure repo exists
         if not os.path.exists(repo_path):
-            return "❌ cluster-infrastructure repository not found. Please wait for it to clone."
+            return "❌ cluster-infrastructure repository not found at /app/projects/cluster-infrastructure."
 
         # 1. Create Deployment
         env_list = []

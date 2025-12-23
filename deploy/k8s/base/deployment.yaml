@@ -68,4 +68,12 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "1000m"
+        volumeMounts:
+        - name: projects
+          mountPath: /app/projects
+      volumes:
+      - name: projects
+        hostPath:
+          path: /home/ubuntu/Projects
+          type: Directory
 
