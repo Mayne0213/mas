@@ -35,13 +35,17 @@ spec:
               key: groq-api-key
         - name: GROQ_API_BASE
           value: "https://api.groq.com/openai/v1"
+        # Chainlit uses asyncpg directly (not SQLAlchemy)
+        - name: CHAINLIT_DATABASE_URL
+          value: "postgresql://bluemayne:$(POSTGRES_PASSWORD)@postgresql-primary.postgresql.svc.cluster.local:5432/mas"
+        # SQLAlchemy format (if needed)
         - name: DATABASE_URL
-          value: "postgresql+asyncpg://mas_user:$(POSTGRES_PASSWORD)@postgresql.postgresql.svc.cluster.local:5432/mas"
+          value: "postgresql+asyncpg://bluemayne:$(POSTGRES_PASSWORD)@postgresql-primary.postgresql.svc.cluster.local:5432/mas"
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: mas-postgres
-              key: password
+              name: postgresql-password
+              key: postgres-password
         - name: REDIS_URL
           value: "redis://redis:6379/0"
         resources:
