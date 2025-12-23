@@ -8,7 +8,6 @@ resources:
   - namespace.yaml
   - resourcequota.yaml
   - externalsecret.yaml
-  - ingress.yaml
 
 commonLabels:
   environment: production
@@ -16,5 +15,5 @@ commonLabels:
 # 이미지 태그 설정 (ArgoCD Image Updater가 자동으로 업데이트)
 images:
   - name: gitea0213.kro.kr/bluemayne/mas
-    newTag: main-sha-349c71880a580d01c69d516e13ee1c4d4c02cd08
+    newTag: main-sha-2f2d8fb7659d105034f5c4840911fd5deac26d5c
 
