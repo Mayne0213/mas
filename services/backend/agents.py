@@ -583,6 +583,313 @@ def docker_list_images(registry: str = "gitea0213.kro.kr") -> str:
         return f"❌ Docker error: {str(e)}"
 
 
+# === 7. YAML Management MCP Tools ===
+@tool
+def yaml_create_deployment(
+    app_name: str,
+    image: str,
+    replicas: int = 1,
+    port: int = 8080,
+    namespace: str = "default",
+    env_vars: str = ""
+) -> str:
+    """
+    Create Kubernetes Deployment YAML file.
+    Args:
+        app_name: Application name
+        image: Container image (e.g., myregistry/myapp:v1.0)
+        replicas: Number of replicas (default: 1)
+        port: Container port (default: 8080)
+        namespace: Namespace (default: default)
+        env_vars: Environment variables as JSON string (e.g., '{"KEY": "value"}')
+    """
+    try:
+        import yaml as yaml_lib
+
+        # Parse env vars
+        env_list = []
+        if env_vars:
+            env_dict = json.loads(env_vars)
+            env_list = [{"name": k, "value": str(v)} for k, v in env_dict.items()]
+
+        deployment = {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "name": app_name,
+                "namespace": namespace,
+                "labels": {"app": app_name}
+            },
+            "spec": {
+                "replicas": replicas,
+                "selector": {"matchLabels": {"app": app_name}},
+                "template": {
+                    "metadata": {"labels": {"app": app_name}},
+                    "spec": {
+                        "containers": [{
+                            "name": app_name,
+                            "image": image,
+                            "ports": [{"containerPort": port, "name": "http"}],
+                            "env": env_list
+                        }]
+                    }
+                }
+            }
+        }
+
+        yaml_content = yaml_lib.dump(deployment, default_flow_style=False, sort_keys=False)
+
+        # Save to file
+        repo_path = "/app/repos/cluster-infrastructure"
+        file_path = f"applications/{app_name}/deployment.yaml"
+        full_path = os.path.join(repo_path, file_path)
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+        with open(full_path, "w") as f:
+            f.write(yaml_content)
+
+        return f"✅ Created Deployment YAML:\n```yaml\n{yaml_content}\n```\n📁 Saved to: {file_path}"
+    except Exception as e:
+        return f"❌ Error creating deployment YAML: {str(e)}"
+
+
+@tool
+def yaml_create_service(
+    app_name: str,
+    port: int = 80,
+    target_port: int = 8080,
+    service_type: str = "ClusterIP",
+    namespace: str = "default"
+) -> str:
+    """
+    Create Kubernetes Service YAML file.
+    Args:
+        app_name: Application name
+        port: Service port (default: 80)
+        target_port: Target container port (default: 8080)
+        service_type: Service type (ClusterIP, NodePort, LoadBalancer) (default: ClusterIP)
+        namespace: Namespace (default: default)
+    """
+    try:
+        import yaml as yaml_lib
+
+        service = {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "metadata": {
+                "name": app_name,
+                "namespace": namespace,
+                "labels": {"app": app_name}
+            },
+            "spec": {
+                "type": service_type,
+                "selector": {"app": app_name},
+                "ports": [{
+                    "port": port,
+                    "targetPort": target_port,
+                    "name": "http"
+                }]
+            }
+        }
+
+        yaml_content = yaml_lib.dump(service, default_flow_style=False, sort_keys=False)
+
+        # Save to file
+        repo_path = "/app/repos/cluster-infrastructure"
+        file_path = f"applications/{app_name}/service.yaml"
+        full_path = os.path.join(repo_path, file_path)
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+        with open(full_path, "w") as f:
+            f.write(yaml_content)
+
+        return f"✅ Created Service YAML:\n```yaml\n{yaml_content}\n```\n📁 Saved to: {file_path}"
+    except Exception as e:
+        return f"❌ Error creating service YAML: {str(e)}"
+
+
+@tool
+def yaml_create_ingress(
+    app_name: str,
+    host: str,
+    service_port: int = 80,
+    namespace: str = "default",
+    tls_enabled: bool = True
+) -> str:
+    """
+    Create Kubernetes Ingress YAML file.
+    Args:
+        app_name: Application name
+        host: Ingress hostname (e.g., myapp.example.com)
+        service_port: Service port (default: 80)
+        namespace: Namespace (default: default)
+        tls_enabled: Enable TLS/HTTPS (default: True)
+    """
+    try:
+        import yaml as yaml_lib
+
+        ingress = {
+            "apiVersion": "networking.k8s.io/v1",
+            "kind": "Ingress",
+            "metadata": {
+                "name": f"{app_name}-ingress",
+                "namespace": namespace,
+                "labels": {"app": app_name},
+                "annotations": {
+                    "cert-manager.io/cluster-issuer": "letsencrypt-prod"
+                }
+            },
+            "spec": {
+                "ingressClassName": "nginx",
+                "rules": [{
+                    "host": host,
+                    "http": {
+                        "paths": [{
+                            "path": "/",
+                            "pathType": "Prefix",
+                            "backend": {
+                                "service": {
+                                    "name": app_name,
+                                    "port": {"number": service_port}
+                                }
+                            }
+                        }]
+                    }
+                }]
+            }
+        }
+
+        if tls_enabled:
+            ingress["spec"]["tls"] = [{
+                "hosts": [host],
+                "secretName": f"{app_name}-tls"
+            }]
+
+        yaml_content = yaml_lib.dump(ingress, default_flow_style=False, sort_keys=False)
+
+        # Save to file
+        repo_path = "/app/repos/cluster-infrastructure"
+        file_path = f"applications/{app_name}/ingress.yaml"
+        full_path = os.path.join(repo_path, file_path)
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+        with open(full_path, "w") as f:
+            f.write(yaml_content)
+
+        return f"✅ Created Ingress YAML:\n```yaml\n{yaml_content}\n```\n📁 Saved to: {file_path}"
+    except Exception as e:
+        return f"❌ Error creating ingress YAML: {str(e)}"
+
+
+@tool
+def yaml_apply_to_cluster(app_name: str, namespace: str = "default") -> str:
+    """
+    Apply YAML files to Kubernetes cluster.
+    Args:
+        app_name: Application name
+        namespace: Namespace (default: default)
+    """
+    try:
+        repo_path = "/app/repos/cluster-infrastructure"
+        app_path = os.path.join(repo_path, f"applications/{app_name}")
+
+        if not os.path.exists(app_path):
+            return f"❌ Application directory not found: {app_path}"
+
+        # Apply all YAML files in the directory
+        results = []
+        for yaml_file in os.listdir(app_path):
+            if yaml_file.endswith(".yaml"):
+                file_path = os.path.join(app_path, yaml_file)
+
+                # Read YAML file
+                with open(file_path, "r") as f:
+                    yaml_content = f.read()
+
+                # Parse YAML to get resource info
+                import yaml as yaml_lib
+                resource = yaml_lib.safe_load(yaml_content)
+                kind = resource.get("kind", "Unknown")
+                name = resource.get("metadata", {}).get("name", "unknown")
+
+                # Apply using Python Kubernetes client
+                try:
+                    if kind == "Deployment":
+                        k8s_apps_v1.create_namespaced_deployment(namespace=namespace, body=resource)
+                    elif kind == "Service":
+                        k8s_core_v1.create_namespaced_service(namespace=namespace, body=resource)
+                    elif kind == "Ingress":
+                        k8s_networking_v1.create_namespaced_ingress(namespace=namespace, body=resource)
+                    else:
+                        results.append(f"⚠️ {yaml_file}: Unsupported resource type {kind}")
+                        continue
+
+                    results.append(f"✅ {yaml_file}: {kind}/{name} created")
+                except ApiException as e:
+                    if e.status == 409:
+                        results.append(f"ℹ️ {yaml_file}: {kind}/{name} already exists")
+                    else:
+                        results.append(f"❌ {yaml_file}: {e.reason}")
+
+        return f"📦 Applied YAMLs for {app_name}:\n" + "\n".join(results)
+    except Exception as e:
+        return f"❌ Error applying YAMLs: {str(e)}"
+
+
+@tool
+def git_show_file_changes(repo_name: str = "cluster-infrastructure") -> str:
+    """
+    Show Git file changes (diff) for UI display.
+    Args:
+        repo_name: Repository name (default: cluster-infrastructure)
+    """
+    try:
+        repo_path = f"/app/repos/{repo_name}"
+        if not os.path.exists(repo_path):
+            return f"❌ Repository not found: {repo_path}"
+
+        # Get git status
+        status_result = subprocess.run(
+            ["git", "-C", repo_path, "status", "--short"],
+            capture_output=True, text=True, timeout=5
+        )
+
+        # Get git diff
+        diff_result = subprocess.run(
+            ["git", "-C", repo_path, "diff"],
+            capture_output=True, text=True, timeout=5
+        )
+
+        # Get list of untracked files with their content
+        untracked_files = []
+        for line in status_result.stdout.split("\n"):
+            if line.startswith("??"):
+                file_path = line[3:].strip()
+                full_path = os.path.join(repo_path, file_path)
+                if os.path.isfile(full_path):
+                    with open(full_path, "r") as f:
+                        content = f.read()
+                    untracked_files.append({
+                        "path": file_path,
+                        "content": content
+                    })
+
+        output = "📝 **Git Changes**\n\n"
+        output += f"**Status:**\n```\n{status_result.stdout}\n```\n\n"
+
+        if diff_result.stdout:
+            output += f"**Modified Files (Diff):**\n```diff\n{diff_result.stdout}\n```\n\n"
+
+        if untracked_files:
+            output += "**New Files:**\n\n"
+            for file_info in untracked_files:
+                output += f"📄 **{file_info['path']}**\n```yaml\n{file_info['content']}\n```\n\n"
+
+        return output
+    except Exception as e:
+        return f"❌ Error showing changes: {str(e)}"
+
+
 # MCP Tools Collection
 mcp_tools = [
     # Kubernetes
@@ -598,6 +905,7 @@ mcp_tools = [
     # Git
     git_list_repos,
     git_recent_commits,
+    git_show_file_changes,
     # Prometheus
     prometheus_query,
     prometheus_node_metrics,
@@ -606,6 +914,22 @@ mcp_tools = [
     fs_list_directory,
     # Docker
     docker_list_images,
+    # YAML Management
+    yaml_create_deployment,
+    yaml_create_service,
+    yaml_create_ingress,
+    yaml_apply_to_cluster,
+]
+
+# YAML Manager specific tools (for Groq agents with write permissions)
+yaml_manager_tools = [
+    yaml_create_deployment,
+    yaml_create_service,
+    yaml_create_ingress,
+    yaml_apply_to_cluster,
+    git_show_file_changes,
+    git_create_file,
+    git_push,
 ]
 
 
@@ -628,6 +952,7 @@ ORCHESTRATOR_PROMPT = """당신은 MAS의 총괄 조율자이자 DevOps 전문�
 1. backend_developer: FastAPI, Node.js 백엔드 개발
 2. frontend_developer: Next.js, React 프론트엔드 개발
 3. sre_specialist: 모니터링, 성능 최적화, 보안
+4. yaml_manager: Kubernetes YAML 파일 생성 및 관리, Git 배포
 
 **사용 가능한 도구(Tools)**:
 당신은 실제 서버 상태에 접근할 수 있는 다양한 도구를 사용할 수 있습니다:
@@ -737,6 +1062,43 @@ SRE_PROMPT = """당신은 SRE(Site Reliability Engineer) 전문가입니다.
 """
 
 
+# ===== 5. Groq #4 - YAML Manager =====
+groq_yaml_manager = ChatOpenAI(
+    model=os.getenv("GROQ_YAML_MODEL", "llama-3.3-70b-specdec"),
+    base_url=GROQ_API_BASE,
+    api_key=GROQ_API_KEY,
+    temperature=0.3,
+)
+
+YAML_MANAGER_PROMPT = """당신은 Kubernetes YAML 파일 관리 전문가입니다.
+
+**역할**:
+- Kubernetes 리소스 YAML 파일 생성 (Deployment, Service, Ingress, ConfigMap, Secret 등)
+- 애플리케이션별 폴더 구조로 YAML 정리
+- Git 저장소에 YAML 파일 커밋 및 푸시
+- Kustomize 오버레이 구조 생성 (base, dev, prod)
+- ArgoCD Application 매니페스트 생성
+
+**사용 가능한 도구**:
+- yaml_create_deployment: Deployment YAML 생성
+- yaml_create_service: Service YAML 생성
+- yaml_create_ingress: Ingress YAML 생성
+- yaml_create_kustomization: Kustomization 파일 생성
+- yaml_apply_to_cluster: YAML을 클러스터에 적용
+- git_commit_yaml: YAML 파일들을 Git에 커밋
+
+**작업 흐름**:
+1. 사용자 요구사항 분석
+2. 필요한 Kubernetes 리소스 결정
+3. 적절한 폴더 구조 생성 (예: deploy/k8s/<app-name>/)
+4. YAML 파일 생성 및 검증
+5. Git 저장소에 커밋 및 푸시
+6. ArgoCD에서 자동 배포되도록 설정
+
+요청된 YAML 관리 작업을 수행하세요.
+"""
+
+
 def orchestrator_node(state: AgentState) -> AgentState:
     """Claude Code - 작업 분석 및 할당 (도구 사용 가능)"""
     messages = state["messages"]
@@ -780,7 +1142,9 @@ def orchestrator_node(state: AgentState) -> AgentState:
     
     # 작업 타입 결정
     content_lower = content.lower()
-    if "backend" in content_lower or "api" in content_lower or "fastapi" in content_lower:
+    if "yaml" in content_lower or "deployment" in content_lower or "kubernetes" in content_lower or "k8s" in content_lower or "manifests" in content_lower:
+        next_agent = "yaml_manager"
+    elif "backend" in content_lower or "api" in content_lower or "fastapi" in content_lower:
         next_agent = "backend_developer"
     elif "frontend" in content_lower or "ui" in content_lower or "react" in content_lower:
         next_agent = "frontend_developer"
@@ -837,31 +1201,84 @@ def frontend_node(state: AgentState) -> AgentState:
 def sre_node(state: AgentState) -> AgentState:
     """Groq #3 - SRE 작업"""
     messages = state["messages"]
-    
+
     response = groq_sre.invoke([
         SystemMessage(content=SRE_PROMPT),
         HumanMessage(content=messages[-1]["content"])
     ])
-    
+
     state["messages"].append({
         "role": "sre_specialist",
         "content": response.content
     })
     state["current_agent"] = "orchestrator"
-    
+
     return state
 
 
-def router(state: AgentState) -> Literal["backend_developer", "frontend_developer", "sre_specialist", "end"]:
+def yaml_manager_node(state: AgentState) -> AgentState:
+    """Groq #4 - YAML Manager"""
+    messages = state["messages"]
+
+    # Bind YAML manager tools to this agent
+    yaml_manager = groq_yaml_manager.bind_tools(yaml_manager_tools)
+
+    response = yaml_manager.invoke([
+        SystemMessage(content=YAML_MANAGER_PROMPT),
+        HumanMessage(content=messages[-1]["content"])
+    ])
+
+    # Handle tool calls if any
+    tool_outputs = []
+    if hasattr(response, 'tool_calls') and response.tool_calls:
+        for tool_call in response.tool_calls:
+            tool_name = tool_call['name']
+            tool_args = tool_call.get('args', {})
+
+            # Execute tool
+            try:
+                tool_func = next(t for t in yaml_manager_tools if t.name == tool_name)
+                tool_result = tool_func.invoke(tool_args)
+                tool_outputs.append(f"\n🔧 **{tool_name}**: {tool_result}")
+            except Exception as e:
+                tool_outputs.append(f"\n❌ **{tool_name}** failed: {str(e)}")
+
+        # Call agent again with tool results
+        if tool_outputs:
+            tool_context = "\n".join(tool_outputs)
+            response = yaml_manager.invoke([
+                SystemMessage(content=YAML_MANAGER_PROMPT),
+                HumanMessage(content=messages[-1]["content"]),
+                HumanMessage(content=f"도구 실행 결과:\n{tool_context}")
+            ])
+
+    content = response.content if isinstance(response.content, str) else str(response.content)
+
+    # Add tool outputs to content
+    if tool_outputs:
+        content = "\n".join(tool_outputs) + "\n\n" + content
+
+    state["messages"].append({
+        "role": "yaml_manager",
+        "content": content
+    })
+    state["current_agent"] = "orchestrator"
+
+    return state
+
+
+def router(state: AgentState) -> Literal["backend_developer", "frontend_developer", "sre_specialist", "yaml_manager", "end"]:
     """다음 에이전트 라우팅"""
     current = state.get("current_agent", "orchestrator")
-    
+
     if current == "backend_developer":
         return "backend_developer"
     elif current == "frontend_developer":
         return "frontend_developer"
     elif current == "sre_specialist":
         return "sre_specialist"
+    elif current == "yaml_manager":
+        return "yaml_manager"
     else:
         return "end"
 
@@ -870,13 +1287,14 @@ def router(state: AgentState) -> Literal["backend_developer", "frontend_develope
 def create_mas_graph():
     """MAS 워크플로우 그래프 생성"""
     workflow = StateGraph(AgentState)
-    
+
     # 노드 추가
     workflow.add_node("orchestrator", orchestrator_node)
     workflow.add_node("backend_developer", backend_node)
     workflow.add_node("frontend_developer", frontend_node)
     workflow.add_node("sre_specialist", sre_node)
-    
+    workflow.add_node("yaml_manager", yaml_manager_node)
+
     # 엣지 정의
     workflow.set_entry_point("orchestrator")
     workflow.add_conditional_edges(
@@ -886,15 +1304,17 @@ def create_mas_graph():
             "backend_developer": "backend_developer",
             "frontend_developer": "frontend_developer",
             "sre_specialist": "sre_specialist",
+            "yaml_manager": "yaml_manager",
             "end": END
         }
     )
-    
+
     # 각 에이전트는 작업 후 orchestrator로 복귀
     workflow.add_edge("backend_developer", "orchestrator")
     workflow.add_edge("frontend_developer", "orchestrator")
     workflow.add_edge("sre_specialist", "orchestrator")
-    
+    workflow.add_edge("yaml_manager", "orchestrator")
+
     return workflow.compile()
 
 

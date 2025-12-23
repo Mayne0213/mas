@@ -16,9 +16,10 @@ async def start():
         content="🤖 **Multi-Agent System**에 오신 것을 환영합니다!\n\n"
                 "저는 다음 전문가 팀과 함께 작업합니다:\n\n"
                 "- 🎼 **Claude Code**: 총괄 조율자 & DevOps 전문가\n"
-                "- ⚙️ **Qwen Backend**: 백엔드 개발자\n"
-                "- 🎨 **Qwen Frontend**: 프론트엔드 개발자\n"
-                "- 📊 **Qwen SRE**: 모니터링 & 성능 전문가\n\n"
+                "- ⚙️ **Groq Backend**: 백엔드 개발자\n"
+                "- 🎨 **Groq Frontend**: 프론트엔드 개발자\n"
+                "- 📊 **Groq SRE**: 모니터링 & 성능 전문가\n"
+                "- 📝 **Groq YAML Manager**: Kubernetes YAML 파일 관리\n\n"
                 "무엇을 도와드릴까요?"
     ).send()
 
@@ -52,7 +53,8 @@ async def main(message: cl.Message):
                     "orchestrator": "🎼",
                     "backend_developer": "⚙️",
                     "frontend_developer": "🎨",
-                    "sre_specialist": "📊"
+                    "sre_specialist": "📊",
+                    "yaml_manager": "📝"
                 }
                 
                 icon = agent_icons.get(agent_name, "🤖")
@@ -77,9 +79,10 @@ def rename(orig_author: str):
     """에이전트 이름 매핑"""
     rename_dict = {
         "orchestrator": "Claude Code (Orchestrator)",
-        "backend_developer": "Qwen Backend Dev",
-        "frontend_developer": "Qwen Frontend Dev",
-        "sre_specialist": "Qwen SRE"
+        "backend_developer": "Groq Backend Dev",
+        "frontend_developer": "Groq Frontend Dev",
+        "sre_specialist": "Groq SRE",
+        "yaml_manager": "Groq YAML Manager"
     }
     return rename_dict.get(orig_author, orig_author)
 
