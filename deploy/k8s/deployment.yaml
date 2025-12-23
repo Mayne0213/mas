@@ -45,10 +45,12 @@ spec:
         - name: GROQ_API_BASE
           value: "https://api.groq.com/openai/v1"
         - name: DATABASE_URL
+          value: "postgresql+asyncpg://mas_user:$(POSTGRES_PASSWORD)@postgresql.postgresql.svc.cluster.local:5432/mas"
+        - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
               name: mas-postgres
-              key: database-url
+              key: password
         - name: REDIS_URL
           value: "redis://redis:6379/0"
         resources:
