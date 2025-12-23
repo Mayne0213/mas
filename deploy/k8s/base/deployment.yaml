@@ -15,6 +15,7 @@ spec:
       labels:
         app: mas
     spec:
+      serviceAccountName: mas
       containers:
       - name: mas
         image: gitea0213.kro.kr/bluemayne/mas:latest
