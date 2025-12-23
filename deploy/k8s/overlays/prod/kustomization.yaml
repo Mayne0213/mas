@@ -15,6 +15,6 @@ commonLabels:
 
 # 이미지 태그 설정 (ArgoCD Image Updater가 자동으로 업데이트)
 images:
-  - name: harbor.mayne.vcn/mas/platform
+  - name: gitea0213.kro.kr/bluemayne/mas
     newTag: latest
 

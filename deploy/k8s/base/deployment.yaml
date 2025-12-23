@@ -17,7 +17,8 @@ spec:
     spec:
       containers:
       - name: mas
-        image: harbor.mayne.vcn/mas/platform:latest
+        image: gitea0213.kro.kr/bluemayne/mas:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 8000
           name: http
