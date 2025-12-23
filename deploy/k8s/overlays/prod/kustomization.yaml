@@ -8,6 +8,7 @@ resources:
   - namespace.yaml
   - resourcequota.yaml
   - externalsecret.yaml
+  - serviceaccount.yaml
 
 commonLabels:
   environment: production
