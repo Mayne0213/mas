@@ -448,6 +448,31 @@ def git_clone_repo(repo_url: str, repo_name: str = "") -> str:
 
 
 @tool
+def git_read_file(repo_name: str, file_path: str) -> str:
+    """
+    Read a file from a Git repository.
+    Args:
+        repo_name: Repository name (e.g., portfolio, mas, cluster-infrastructure)
+        file_path: File path relative to repo root (e.g., README.md, src/index.js)
+    """
+    try:
+        repo_path = f"/app/projects/{repo_name}"
+        if not os.path.exists(repo_path):
+            return f"❌ Repository not found: {repo_path}"
+
+        full_path = os.path.join(repo_path, file_path)
+        if not os.path.exists(full_path):
+            return f"❌ File not found: {file_path} in {repo_name}"
+
+        with open(full_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        return f"📄 {file_path} ({repo_name}):\n\n{content}"
+    except Exception as e:
+        return f"❌ Read file error: {str(e)}"
+
+
+@tool
 def git_create_file(repo_name: str, file_path: str, content: str, commit_message: str = "") -> str:
     """
     Create or update a file in a Git repository and commit it.
@@ -1232,45 +1257,52 @@ def git_show_file_changes(repo_name: str = "cluster-infrastructure") -> str:
 
 
 # MCP Tools Collection
-mcp_tools = [
-    # Kubernetes
+# Read-only tools (available to ALL agents including Groq)
+read_only_tools = [
+    # File System - READ ONLY
+    fs_read_file,
+    fs_list_directory,
+    git_read_file,
+    # Git - READ ONLY
+    git_list_repos,
+    git_recent_commits,
+    git_show_file_changes,
+    # Kubernetes - READ ONLY
     k8s_get_nodes,
     k8s_get_pods,
     k8s_get_deployments,
     k8s_get_pod_logs,
     k8s_describe_resource,
-    # PostgreSQL
+    # PostgreSQL - READ ONLY
     postgres_query,
     postgres_list_databases,
     postgres_table_info,
-    # Git
-    git_list_repos,
-    git_recent_commits,
-    git_show_file_changes,
-    # Prometheus
+    # Prometheus - READ ONLY
     prometheus_query,
     prometheus_node_metrics,
-    # File System
-    fs_read_file,
-    fs_list_directory,
-    # Docker
+    # Docker - READ ONLY
     docker_list_images,
-    # YAML Management
+]
+
+# MCP tools for orchestrator (includes read + write operations)
+mcp_tools = read_only_tools + [
+    # YAML Management (write operations)
     yaml_create_deployment,
     yaml_create_service,
     yaml_create_ingress,
     yaml_apply_to_cluster,
 ]
 
-# YAML Manager specific tools (for Groq agents with write permissions)
-yaml_manager_tools = [
+# YAML Manager specific tools (read + write for Git/YAML operations)
+yaml_manager_tools = read_only_tools + [
+    # YAML write operations
     yaml_create_deployment,
     yaml_create_service,
     yaml_create_ingress,
     yaml_create_argocd_application,
     yaml_deploy_application,  # 🌟 All-in-one deployment
     yaml_apply_to_cluster,
-    git_show_file_changes,
+    # Git write operations
     git_create_file,
     git_push,
 ]
@@ -1346,7 +1378,7 @@ groq_backend = ChatOpenAI(
     base_url=GROQ_API_BASE,
     api_key=GROQ_API_KEY,
     temperature=0.7,
-)
+).bind_tools(read_only_tools)  # Read-only access to files and resources
 
 BACKEND_PROMPT = """당신은 백엔드 개발 전문가입니다.
 
@@ -1366,7 +1398,7 @@ groq_frontend = ChatOpenAI(
     base_url=GROQ_API_BASE,
     api_key=GROQ_API_KEY,
     temperature=0.7,
-)
+).bind_tools(read_only_tools)  # Read-only access to files and resources
 
 FRONTEND_PROMPT = """당신은 프론트엔드 개발 전문가입니다.
 
@@ -1386,7 +1418,7 @@ groq_sre = ChatOpenAI(
     base_url=GROQ_API_BASE,
     api_key=GROQ_API_KEY,
     temperature=0.3,
-)
+).bind_tools(read_only_tools)  # Read-only access to files and resources
 
 SRE_PROMPT = """당신은 SRE(Site Reliability Engineer) 전문가입니다.
 
@@ -1532,36 +1564,90 @@ def orchestrator_node(state: AgentState) -> AgentState:
 def backend_node(state: AgentState) -> AgentState:
     """Groq #1 - 백엔드 개발"""
     messages = state["messages"]
-    
+
     response = groq_backend.invoke([
         SystemMessage(content=BACKEND_PROMPT),
         HumanMessage(content=messages[-1]["content"])
     ])
-    
+
+    # Handle tool calls if any
+    tool_outputs = []
+    if hasattr(response, 'tool_calls') and response.tool_calls:
+        for tool_call in response.tool_calls:
+            tool_name = tool_call['name']
+            tool_args = tool_call.get('args', {})
+
+            try:
+                tool_func = next(t for t in read_only_tools if t.name == tool_name)
+                tool_result = tool_func.invoke(tool_args)
+                tool_outputs.append(f"\n🔧 **{tool_name}**: {tool_result}")
+            except Exception as e:
+                tool_outputs.append(f"\n❌ **{tool_name}** failed: {str(e)}")
+
+        # Call agent again with tool results
+        if tool_outputs:
+            tool_context = "\n".join(tool_outputs)
+            response = groq_backend.invoke([
+                SystemMessage(content=BACKEND_PROMPT),
+                HumanMessage(content=messages[-1]["content"]),
+                HumanMessage(content=f"도구 실행 결과:\n{tool_context}")
+            ])
+
+    content = response.content if isinstance(response.content, str) else str(response.content)
+    if tool_outputs:
+        content = "\n".join(tool_outputs) + "\n\n" + content
+
     state["messages"].append({
         "role": "backend_developer",
-        "content": response.content
+        "content": content
     })
-    state["current_agent"] = "orchestrator"  # 결과를 오케스트레이터에게 반환
-    
+    state["current_agent"] = "orchestrator"
+
     return state
 
 
 def frontend_node(state: AgentState) -> AgentState:
     """Groq #2 - 프론트엔드 개발"""
     messages = state["messages"]
-    
+
     response = groq_frontend.invoke([
         SystemMessage(content=FRONTEND_PROMPT),
         HumanMessage(content=messages[-1]["content"])
     ])
-    
+
+    # Handle tool calls if any
+    tool_outputs = []
+    if hasattr(response, 'tool_calls') and response.tool_calls:
+        for tool_call in response.tool_calls:
+            tool_name = tool_call['name']
+            tool_args = tool_call.get('args', {})
+
+            try:
+                tool_func = next(t for t in read_only_tools if t.name == tool_name)
+                tool_result = tool_func.invoke(tool_args)
+                tool_outputs.append(f"\n🔧 **{tool_name}**: {tool_result}")
+            except Exception as e:
+                tool_outputs.append(f"\n❌ **{tool_name}** failed: {str(e)}")
+
+        # Call agent again with tool results
+        if tool_outputs:
+            tool_context = "\n".join(tool_outputs)
+            response = groq_frontend.invoke([
+                SystemMessage(content=FRONTEND_PROMPT),
+                HumanMessage(content=messages[-1]["content"]),
+                HumanMessage(content=f"도구 실행 결과:\n{tool_context}")
+            ])
+
+    content = response.content if isinstance(response.content, str) else str(response.content)
+    if tool_outputs:
+        content = "\n".join(tool_outputs) + "\n\n" + content
+
     state["messages"].append({
         "role": "frontend_developer",
-        "content": response.content
+        "content": content
     })
     state["current_agent"] = "orchestrator"
-    
+
     return state
 
 
@@ -1574,9 +1660,36 @@ def sre_node(state: AgentState) -> AgentState:
         HumanMessage(content=messages[-1]["content"])
     ])
 
+    # Handle tool calls if any
+    tool_outputs = []
+    if hasattr(response, 'tool_calls') and response.tool_calls:
+        for tool_call in response.tool_calls:
+            tool_name = tool_call['name']
+            tool_args = tool_call.get('args', {})
+
+            try:
+                tool_func = next(t for t in read_only_tools if t.name == tool_name)
+                tool_result = tool_func.invoke(tool_args)
+                tool_outputs.append(f"\n🔧 **{tool_name}**: {tool_result}")
+            except Exception as e:
+                tool_outputs.append(f"\n❌ **{tool_name}** failed: {str(e)}")
+
+        # Call agent again with tool results
+        if tool_outputs:
+            tool_context = "\n".join(tool_outputs)
+            response = groq_sre.invoke([
+                SystemMessage(content=SRE_PROMPT),
+                HumanMessage(content=messages[-1]["content"]),
+                HumanMessage(content=f"도구 실행 결과:\n{tool_context}")
+            ])
+
+    content = response.content if isinstance(response.content, str) else str(response.content)
+    if tool_outputs:
+        content = "\n".join(tool_outputs) + "\n\n" + content
+
     state["messages"].append({
         "role": "sre_specialist",
-        "content": response.content
+        "content": content
     })
     state["current_agent"] = "orchestrator"
 
