@@ -6,7 +6,7 @@ metadata:
   labels:
     app: mas
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: mas
@@ -46,21 +46,9 @@ spec:
           value: "redis://redis:6379/0"
         resources:
           requests:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: "256Mi"
+            cpu: "100m"
           limits:
-            memory: "2Gi"
-            cpu: "2000m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 10
-          periodSeconds: 5
+            memory: "1Gi"
+            cpu: "1000m"
 
