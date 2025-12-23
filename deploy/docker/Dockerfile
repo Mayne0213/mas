@@ -19,7 +19,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 애플리케이션 코드 복사
-COPY . .
+COPY *.py .
+
+# Chainlit 설정 디렉토리 미리 생성 (권한 문제 해결)
+RUN mkdir -p /root/.chainlit
 
 # Chainlit 포트
 EXPOSE 8000
