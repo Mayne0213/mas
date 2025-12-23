@@ -47,6 +47,46 @@ k8s_batch_v1 = client.BatchV1Api()
 k8s_networking_v1 = client.NetworkingV1Api()
 
 
+# ===== Auto-clone cluster-infrastructure repository on startup =====
+def auto_clone_infrastructure_repo():
+    """
+    Automatically clone cluster-infrastructure repository on pod startup.
+    """
+    repo_url = os.getenv("INFRA_REPO_URL", "https://gitea0213.kro.kr/bluemayne/cluster-infrastructure.git")
+    repo_path = "/app/repos/cluster-infrastructure"
+
+    if os.path.exists(repo_path):
+        print(f"✅ cluster-infrastructure already exists at {repo_path}")
+        # Pull latest changes
+        try:
+            subprocess.run(["git", "-C", repo_path, "pull"], timeout=30, check=True)
+            print("✅ Pulled latest changes from cluster-infrastructure")
+        except Exception as e:
+            print(f"⚠️ Failed to pull: {e}")
+        return
+
+    try:
+        os.makedirs("/app/repos", exist_ok=True)
+
+        # Use Gitea token if available
+        token = os.getenv("GITEA_TOKEN", "")
+        if token and "gitea0213.kro.kr" in repo_url:
+            repo_url = repo_url.replace("https://", f"https://{token}@")
+
+        subprocess.run(["git", "clone", repo_url, repo_path], timeout=60, check=True)
+
+        # Configure git user
+        subprocess.run(["git", "-C", repo_path, "config", "user.name", "mas-agent"], timeout=5)
+        subprocess.run(["git", "-C", repo_path, "config", "user.email", "mas-agent@mas.local"], timeout=5)
+
+        print(f"✅ Successfully cloned cluster-infrastructure to {repo_path}")
+    except Exception as e:
+        print(f"❌ Failed to clone cluster-infrastructure: {e}")
+
+# Auto-clone on module import
+auto_clone_infrastructure_repo()
+
+
 # ===== MCP Tools =====
 
 # === 1. Kubernetes MCP Tools ===
@@ -837,6 +877,298 @@ def yaml_apply_to_cluster(app_name: str, namespace: str = "default") -> str:
 
 
 @tool
+def yaml_create_argocd_application(
+    app_name: str,
+    namespace: str = "default",
+    repo_url: str = "https://gitea0213.kro.kr/bluemayne/cluster-infrastructure.git",
+    path: str = "",
+    auto_sync: bool = True
+) -> str:
+    """
+    Create ArgoCD Application manifest for automatic deployment.
+    Args:
+        app_name: Application name
+        namespace: Target namespace (default: default)
+        repo_url: Git repository URL (default: cluster-infrastructure)
+        path: Path to manifests in repo (default: applications/{app_name})
+        auto_sync: Enable auto-sync (default: True)
+    """
+    try:
+        import yaml as yaml_lib
+
+        if not path:
+            path = f"applications/{app_name}"
+
+        application = {
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "Application",
+            "metadata": {
+                "name": app_name,
+                "namespace": "argocd",
+                "finalizers": ["resources-finalizer.argocd.argoproj.io"]
+            },
+            "spec": {
+                "project": "default",
+                "source": {
+                    "repoURL": repo_url,
+                    "targetRevision": "HEAD",
+                    "path": path
+                },
+                "destination": {
+                    "server": "https://kubernetes.default.svc",
+                    "namespace": namespace
+                },
+                "syncPolicy": {
+                    "automated": {
+                        "prune": True,
+                        "selfHeal": True
+                    } if auto_sync else None,
+                    "syncOptions": [
+                        "CreateNamespace=true"
+                    ]
+                }
+            }
+        }
+
+        yaml_content = yaml_lib.dump(application, default_flow_style=False, sort_keys=False)
+
+        # Save to file
+        repo_path = "/app/repos/cluster-infrastructure"
+        file_path = f"argocd-applications/{app_name}.yaml"
+        full_path = os.path.join(repo_path, file_path)
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+        with open(full_path, "w") as f:
+            f.write(yaml_content)
+
+        return f"✅ Created ArgoCD Application:\n```yaml\n{yaml_content}\n```\n📁 Saved to: {file_path}"
+    except Exception as e:
+        return f"❌ Error creating ArgoCD Application: {str(e)}"
+
+
+@tool
+def yaml_deploy_application(
+    app_name: str,
+    image: str,
+    port: int = 8080,
+    replicas: int = 1,
+    namespace: str = "default",
+    host: str = "",
+    env_vars: str = "",
+    enable_ingress: bool = True,
+    auto_sync_argocd: bool = True
+) -> str:
+    """
+    Complete application deployment workflow:
+    1. Create Deployment, Service, Ingress YAMLs
+    2. Create ArgoCD Application
+    3. Git commit and push
+    4. Display changes
+
+    Args:
+        app_name: Application name
+        image: Container image (e.g., registry/myapp:v1.0)
+        port: Container port (default: 8080)
+        replicas: Number of replicas (default: 1)
+        namespace: Namespace (default: default)
+        host: Ingress hostname (e.g., myapp.example.com)
+        env_vars: Environment variables as JSON (e.g., '{"KEY": "value"}')
+        enable_ingress: Create Ingress (default: True)
+        auto_sync_argocd: Enable ArgoCD auto-sync (default: True)
+    """
+    try:
+        import yaml as yaml_lib
+
+        repo_path = "/app/repos/cluster-infrastructure"
+        app_path = f"applications/{app_name}"
+        results = []
+
+        # Ensure repo exists
+        if not os.path.exists(repo_path):
+            return "❌ cluster-infrastructure repository not found. Please wait for it to clone."
+
+        # 1. Create Deployment
+        env_list = []
+        if env_vars:
+            env_dict = json.loads(env_vars)
+            env_list = [{"name": k, "value": str(v)} for k, v in env_dict.items()]
+
+        deployment = {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {"name": app_name, "namespace": namespace, "labels": {"app": app_name}},
+            "spec": {
+                "replicas": replicas,
+                "selector": {"matchLabels": {"app": app_name}},
+                "template": {
+                    "metadata": {"labels": {"app": app_name}},
+                    "spec": {
+                        "containers": [{
+                            "name": app_name,
+                            "image": image,
+                            "ports": [{"containerPort": port, "name": "http"}],
+                            "env": env_list
+                        }]
+                    }
+                }
+            }
+        }
+
+        # 2. Create Service
+        service = {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "metadata": {"name": app_name, "namespace": namespace, "labels": {"app": app_name}},
+            "spec": {
+                "type": "ClusterIP",
+                "selector": {"app": app_name},
+                "ports": [{"port": 80, "targetPort": port, "name": "http"}]
+            }
+        }
+
+        # 3. Create Ingress (if enabled)
+        ingress = None
+        if enable_ingress and host:
+            ingress = {
+                "apiVersion": "networking.k8s.io/v1",
+                "kind": "Ingress",
+                "metadata": {
+                    "name": f"{app_name}-ingress",
+                    "namespace": namespace,
+                    "labels": {"app": app_name},
+                    "annotations": {"cert-manager.io/cluster-issuer": "letsencrypt-prod"}
+                },
+                "spec": {
+                    "ingressClassName": "nginx",
+                    "tls": [{"hosts": [host], "secretName": f"{app_name}-tls"}],
+                    "rules": [{
+                        "host": host,
+                        "http": {
+                            "paths": [{
+                                "path": "/",
+                                "pathType": "Prefix",
+                                "backend": {"service": {"name": app_name, "port": {"number": 80}}}
+                            }]
+                        }
+                    }]
+                }
+            }
+
+        # Save YAMLs
+        os.makedirs(os.path.join(repo_path, app_path), exist_ok=True)
+
+        with open(os.path.join(repo_path, app_path, "deployment.yaml"), "w") as f:
+            f.write(yaml_lib.dump(deployment, default_flow_style=False, sort_keys=False))
+        results.append("✅ deployment.yaml")
+
+        with open(os.path.join(repo_path, app_path, "service.yaml"), "w") as f:
+            f.write(yaml_lib.dump(service, default_flow_style=False, sort_keys=False))
+        results.append("✅ service.yaml")
+
+        if ingress:
+            with open(os.path.join(repo_path, app_path, "ingress.yaml"), "w") as f:
+                f.write(yaml_lib.dump(ingress, default_flow_style=False, sort_keys=False))
+            results.append("✅ ingress.yaml")
+
+        # 4. Create ArgoCD Application
+        argocd_app = {
+            "apiVersion": "argoproj.io/v1alpha1",
+            "kind": "Application",
+            "metadata": {
+                "name": app_name,
+                "namespace": "argocd",
+                "finalizers": ["resources-finalizer.argocd.argoproj.io"]
+            },
+            "spec": {
+                "project": "default",
+                "source": {
+                    "repoURL": "https://gitea0213.kro.kr/bluemayne/cluster-infrastructure.git",
+                    "targetRevision": "HEAD",
+                    "path": app_path
+                },
+                "destination": {
+                    "server": "https://kubernetes.default.svc",
+                    "namespace": namespace
+                },
+                "syncPolicy": {
+                    "automated": {"prune": True, "selfHeal": True} if auto_sync_argocd else None,
+                    "syncOptions": ["CreateNamespace=true"]
+                }
+            }
+        }
+
+        argocd_path = f"argocd-applications/{app_name}.yaml"
+        os.makedirs(os.path.join(repo_path, "argocd-applications"), exist_ok=True)
+        with open(os.path.join(repo_path, argocd_path), "w") as f:
+            f.write(yaml_lib.dump(argocd_app, default_flow_style=False, sort_keys=False))
+        results.append("✅ ArgoCD Application")
+
+        # 5. Git add, commit, push
+        subprocess.run(["git", "-C", repo_path, "add", app_path, argocd_path], check=True, timeout=10)
+
+        commit_msg = f"Deploy {app_name} to {namespace}\n\nImage: {image}\nReplicas: {replicas}"
+        if host:
+            commit_msg += f"\nIngress: {host}"
+
+        subprocess.run(
+            ["git", "-C", repo_path, "commit", "-m", commit_msg],
+            check=True, timeout=10
+        )
+        results.append("✅ Git commit")
+
+        # Get remote URL and check if token is available
+        token = os.getenv("GITEA_TOKEN", "")
+        if token:
+            # Set remote URL with token
+            remote_url = subprocess.run(
+                ["git", "-C", repo_path, "remote", "get-url", "origin"],
+                capture_output=True, text=True, timeout=5
+            ).stdout.strip()
+
+            if "gitea0213.kro.kr" in remote_url and token not in remote_url:
+                auth_url = remote_url.replace("https://", f"https://{token}@")
+                subprocess.run(["git", "-C", repo_path, "remote", "set-url", "origin", auth_url], timeout=5)
+
+        push_result = subprocess.run(
+            ["git", "-C", repo_path, "push", "origin", "HEAD"],
+            capture_output=True, text=True, timeout=30
+        )
+
+        if push_result.returncode == 0:
+            results.append("✅ Git push")
+        else:
+            results.append(f"⚠️ Git push failed: {push_result.stderr}")
+
+        # 6. Show summary
+        summary = f"""
+🚀 **Application Deployed: {app_name}**
+
+📦 **Created Files:**
+{chr(10).join('  ' + r for r in results)}
+
+📂 **Location:** `{app_path}/`
+
+🔗 **ArgoCD:** Application `{app_name}` created in ArgoCD
+   - Auto-sync: {'✅ Enabled' if auto_sync_argocd else '❌ Disabled'}
+   - Namespace: `{namespace}`
+
+🌐 **Access:** {f'https://{host}' if host else 'Service only (no Ingress)'}
+
+⏱️ **Next Steps:**
+1. ArgoCD will detect the new application automatically
+2. Deployment will start in ~30 seconds
+3. Check status: `kubectl get pods -n {namespace}`
+"""
+
+        return summary
+
+    except subprocess.CalledProcessError as e:
+        return f"❌ Git command failed: {e.stderr if hasattr(e, 'stderr') else str(e)}"
+    except Exception as e:
+        return f"❌ Deployment failed: {str(e)}"
+
+
+@tool
 def git_show_file_changes(repo_name: str = "cluster-infrastructure") -> str:
     """
     Show Git file changes (diff) for UI display.
@@ -926,6 +1258,8 @@ yaml_manager_tools = [
     yaml_create_deployment,
     yaml_create_service,
     yaml_create_ingress,
+    yaml_create_argocd_application,
+    yaml_deploy_application,  # 🌟 All-in-one deployment
     yaml_apply_to_cluster,
     git_show_file_changes,
     git_create_file,
@@ -1070,32 +1404,56 @@ groq_yaml_manager = ChatOpenAI(
     temperature=0.3,
 )
 
-YAML_MANAGER_PROMPT = """당신은 Kubernetes YAML 파일 관리 전문가입니다.
+YAML_MANAGER_PROMPT = """당신은 Kubernetes YAML 파일 관리 및 자동 배포 전문가입니다.
 
 **역할**:
-- Kubernetes 리소스 YAML 파일 생성 (Deployment, Service, Ingress, ConfigMap, Secret 등)
-- 애플리케이션별 폴더 구조로 YAML 정리
-- Git 저장소에 YAML 파일 커밋 및 푸시
-- Kustomize 오버레이 구조 생성 (base, dev, prod)
-- ArgoCD Application 매니페스트 생성
+- Kubernetes 애플리케이션 완전 자동 배포
+- YAML 파일 생성 (Deployment, Service, Ingress)
+- ArgoCD Application 자동 생성 및 설정
+- Git 저장소에 자동 커밋 및 푸시
+- 배포 상태 모니터링 및 보고
 
-**사용 가능한 도구**:
-- yaml_create_deployment: Deployment YAML 생성
-- yaml_create_service: Service YAML 생성
-- yaml_create_ingress: Ingress YAML 생성
-- yaml_create_kustomization: Kustomization 파일 생성
-- yaml_apply_to_cluster: YAML을 클러스터에 적용
-- git_commit_yaml: YAML 파일들을 Git에 커밋
+**🌟 추천 도구: yaml_deploy_application**
+새로운 애플리케이션을 배포할 때는 **yaml_deploy_application**을 사용하세요.
+이 도구는 모든 것을 자동으로 처리합니다:
+- ✅ Deployment, Service, Ingress YAML 생성
+- ✅ ArgoCD Application 생성 (auto-sync 활성화)
+- ✅ Git commit & push
+- ✅ 배포 요약 및 다음 단계 안내
+
+**사용 예시**:
+```
+사용자: "myapp을 배포하고 싶어. 이미지는 nginx:latest, 포트 80, myapp.example.com으로 접속"
+
+→ yaml_deploy_application(
+    app_name="myapp",
+    image="nginx:latest",
+    port=80,
+    host="myapp.example.com"
+)
+```
+
+**개별 도구**:
+- yaml_create_deployment: Deployment만 생성
+- yaml_create_service: Service만 생성
+- yaml_create_ingress: Ingress만 생성
+- yaml_create_argocd_application: ArgoCD Application만 생성
+- yaml_apply_to_cluster: 생성된 YAML을 클러스터에 직접 적용
+- git_show_file_changes: Git 변경사항 확인
+- git_push: Git 푸시
 
 **작업 흐름**:
-1. 사용자 요구사항 분석
-2. 필요한 Kubernetes 리소스 결정
-3. 적절한 폴더 구조 생성 (예: deploy/k8s/<app-name>/)
-4. YAML 파일 생성 및 검증
-5. Git 저장소에 커밋 및 푸시
-6. ArgoCD에서 자동 배포되도록 설정
+1. 사용자 요구사항 분석 (앱 이름, 이미지, 포트, 도메인)
+2. yaml_deploy_application 실행 (한 번에 모두 처리!)
+3. 결과 확인 및 사용자에게 보고
+4. 필요시 추가 설정 (환경 변수, 리소스 제한 등)
 
-요청된 YAML 관리 작업을 수행하세요.
+**중요**:
+- ArgoCD Application은 자동으로 Git 저장소를 모니터링
+- Git push 후 약 30초 내에 자동 배포 시작
+- Auto-sync가 활성화되어 있어 Git 변경사항이 자동 반영됨
+
+요청된 배포 작업을 수행하세요.
 """
 
 
