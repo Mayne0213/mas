@@ -96,7 +96,102 @@ def configure_git_repositories():
 configure_git_repositories()
 
 
-# ===== MCP Tools =====
+# ===== Universal Tools (Bash-centric approach) =====
+
+@tool
+def bash_command(command: str, timeout: int = 120) -> str:
+    """
+    Execute any bash command in the container.
+
+    Examples:
+    - kubectl get pods -n mas
+    - cat /app/projects/portfolio/README.md
+    - git -C /app/projects/mas status
+    - npm test
+    - python script.py
+    - psql -U bluemayne -c 'SELECT * FROM users'
+
+    Args:
+        command: The bash command to execute
+        timeout: Timeout in seconds (default: 120)
+
+    Returns:
+        Command output (stdout and stderr)
+    """
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd="/app"
+        )
+
+        output = ""
+        if result.returncode == 0:
+            output = f"✅ Success (exit code: 0)\n\n{result.stdout}"
+        else:
+            output = f"❌ Failed (exit code: {result.returncode})\n\nSTDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+
+        return output
+    except subprocess.TimeoutExpired:
+        return f"❌ Command timed out after {timeout} seconds"
+    except Exception as e:
+        return f"❌ Error executing command: {str(e)}"
+
+
+@tool
+def read_file(file_path: str, max_lines: int = 1000) -> str:
+    """
+    Read a file from the filesystem.
+
+    Args:
+        file_path: Absolute path to the file (e.g., /app/projects/portfolio/README.md)
+        max_lines: Maximum number of lines to read (default: 1000)
+
+    Returns:
+        File contents
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            if len(lines) > max_lines:
+                content = ''.join(lines[:max_lines])
+                return f"📄 {file_path} (showing first {max_lines} of {len(lines)} lines):\n\n{content}\n\n... (truncated)"
+            else:
+                return f"📄 {file_path}:\n\n{''.join(lines)}"
+    except FileNotFoundError:
+        return f"❌ File not found: {file_path}"
+    except Exception as e:
+        return f"❌ Error reading file: {str(e)}"
+
+
+@tool
+def write_file(file_path: str, content: str) -> str:
+    """
+    Write content to a file.
+
+    Args:
+        file_path: Absolute path to the file
+        content: Content to write
+
+    Returns:
+        Success or error message
+    """
+    try:
+        import os
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        return f"✅ Successfully wrote {len(content)} characters to {file_path}"
+    except Exception as e:
+        return f"❌ Error writing file: {str(e)}"
+
+
+# ===== Legacy MCP Tools (kept for backward compatibility, but not recommended) =====
 
 # === 1. Kubernetes MCP Tools ===
 @tool
@@ -1258,54 +1353,54 @@ def git_show_file_changes(repo_name: str = "cluster-infrastructure") -> str:
 
 # MCP Tools Collection
 # Read-only tools (available to ALL agents including Groq)
-read_only_tools = [
-    # File System - READ ONLY
+# ===== Universal Tools (Bash-centric, Claude Code style) =====
+# All agents get the same 3 tools. Behavior is controlled by prompts, not tool restrictions.
+
+universal_tools = [
+    bash_command,  # Execute any bash command (kubectl, git, npm, python, etc.)
+    read_file,     # Read files (convenience wrapper for 'cat')
+    write_file,    # Write files (convenience wrapper for 'echo >')
+]
+
+# Legacy: For backward compatibility with existing specialized tools
+# (These are still available but not recommended - use bash_command instead)
+legacy_tools = [
+    # File System
     fs_read_file,
     fs_list_directory,
     git_read_file,
-    # Git - READ ONLY
+    # Git
     git_list_repos,
     git_recent_commits,
     git_show_file_changes,
-    # Kubernetes - READ ONLY
+    git_create_file,
+    git_push,
+    # Kubernetes
     k8s_get_nodes,
     k8s_get_pods,
     k8s_get_deployments,
     k8s_get_pod_logs,
     k8s_describe_resource,
-    # PostgreSQL - READ ONLY
+    # PostgreSQL
     postgres_query,
     postgres_list_databases,
     postgres_table_info,
-    # Prometheus - READ ONLY
+    # Prometheus
     prometheus_query,
     prometheus_node_metrics,
-    # Docker - READ ONLY
+    # Docker
     docker_list_images,
-]
-
-# MCP tools for orchestrator (includes read + write operations)
-mcp_tools = read_only_tools + [
-    # YAML Management (write operations)
-    yaml_create_deployment,
-    yaml_create_service,
-    yaml_create_ingress,
-    yaml_apply_to_cluster,
-]
-
-# YAML Manager specific tools (read + write for Git/YAML operations)
-yaml_manager_tools = read_only_tools + [
-    # YAML write operations
+    # YAML
     yaml_create_deployment,
     yaml_create_service,
     yaml_create_ingress,
     yaml_create_argocd_application,
-    yaml_deploy_application,  # 🌟 All-in-one deployment
+    yaml_deploy_application,
     yaml_apply_to_cluster,
-    # Git write operations
-    git_create_file,
-    git_push,
 ]
+
+# For agents that might still need legacy tools during transition
+all_tools = universal_tools + legacy_tools
 
 
 # ===== 1. Claude Code - Orchestrator =====
@@ -1313,7 +1408,7 @@ claude_orchestrator = ChatAnthropic(
     model="claude-sonnet-4-5",  # Latest Claude Sonnet 4.5 (Sep 2025)
     api_key=os.getenv("ANTHROPIC_API_KEY"),
     temperature=0
-).bind_tools(mcp_tools)  # Bind MCP tools to Claude
+).bind_tools(universal_tools)  # Bash-centric: bash, read, write
 
 ORCHESTRATOR_PROMPT = """당신은 MAS의 총괄 조율자이자 DevOps 전문가입니다.
 
@@ -1329,47 +1424,34 @@ ORCHESTRATOR_PROMPT = """당신은 MAS의 총괄 조율자이자 DevOps 전문�
 3. sre_specialist: 모니터링, 성능 최적화, 보안
 4. yaml_manager: Kubernetes YAML 파일 생성 및 관리, Git 배포
 
-**사용 가능한 도구(Tools)**:
-당신은 실제 서버 상태에 접근할 수 있는 다양한 도구를 사용할 수 있습니다:
+**사용 가능한 도구 (3개만 - 단순하고 강력함)**:
 
-1. **Kubernetes 도구**:
-   - k8s_get_nodes(): 노드 상태 조회
-   - k8s_get_pods(namespace, label_selector): Pod 목록 조회
-   - k8s_get_deployments(namespace): Deployment 목록
-   - k8s_get_pod_logs(namespace, pod_name, tail): Pod 로그 확인
-   - k8s_describe_resource(resource_type, name, namespace): 리소스 상세 정보
+1. **bash_command(command, timeout)** - 가장 중요! 모든 것을 할 수 있음
+   예시:
+   - `bash_command("kubectl get pods -n mas")` - Kubernetes 조회
+   - `bash_command("cat /app/projects/portfolio/README.md")` - 파일 읽기
+   - `bash_command("ls /app/projects")` - 디렉토리 목록
+   - `bash_command("git -C /app/projects/mas status")` - Git 상태
+   - `bash_command("psql -U bluemayne -d mas -c 'SELECT * FROM users'")` - DB 쿼리
+   - `bash_command("curl http://prometheus:9090/api/v1/query?query=up")` - Prometheus
+   - `bash_command("npm test")` - 테스트 실행
+   - `bash_command("python script.py")` - Python 실행
 
-2. **PostgreSQL 도구**:
-   - postgres_query(query, database): SQL SELECT 쿼리 실행
-   - postgres_list_databases(): 데이터베이스 목록
-   - postgres_table_info(database, table): 테이블 스키마 정보
+2. **read_file(file_path, max_lines)** - 파일 읽기 (편의성)
+   예시: `read_file("/app/projects/portfolio/README.md")`
 
-3. **Git 도구**:
-   - git_list_repos(): 레포지토리 목록
-   - git_recent_commits(repo, limit): 최근 커밋 조회
-   - git_read_file(repo_name, file_path): Git 레포지토리 파일 읽기
-   - git_show_file_changes(repo_name): Git 변경사항 확인
+3. **write_file(file_path, content)** - 파일 쓰기 (편의성)
+   예시: `write_file("/app/projects/test.txt", "내용")`
 
-4. **Prometheus 도구**:
-   - prometheus_query(query): PromQL 쿼리 실행
-   - prometheus_node_metrics(): 노드 메트릭 조회
-
-5. **파일 시스템 도구** (중요):
-   - fs_read_file(file_path, max_lines): 파일 읽기
-   - fs_list_directory(dir_path): 디렉토리 목록
-
-   **중요 경로**:
-   - `/app/projects/`: 모든 Git 레포지토리가 있는 폴더 (hostPath 마운트)
-     - portfolio, mas, cluster-infrastructure, jovies, todo 등 11개 레포
-   - 사용자가 "Projects 폴더" 또는 "레포지토리"를 물어보면 `/app/projects/`를 확인하세요
-
-6. **Docker 도구**:
-   - docker_list_images(registry): 레지스트리 이미지 목록
+**중요 경로**:
+- `/app/projects/`: 모든 Git 레포지토리 (portfolio, mas, cluster-infrastructure 등 11개)
+- `/app/`: 현재 작업 디렉토리
 
 **사용 방법**:
-- 사용자가 클러스터 상태, 로그, 데이터베이스 등을 물어보면 **반드시 도구를 사용**하여 실제 정보를 확인하세요
-- 추측하지 말고, 도구를 통해 확인한 실제 데이터를 기반으로 답변하세요
-- 여러 정보가 필요한 경우 여러 도구를 순차적으로 사용하세요
+- **bash_command를 적극 활용**하세요. kubectl, git, cat, ls, npm, python 등 모든 CLI 도구 사용 가능
+- 파일을 읽을 때는 read_file 또는 `bash_command("cat file")`
+- 추측하지 말고, 도구를 통해 실제 데이터를 확인하세요
+- 복잡한 작업은 여러 bash 명령을 순차적으로 실행하세요
 
 요청을 분석하고 필요한 도구를 사용한 후, 적절한 에이전트에게 작업을 할당하세요.
 """
@@ -1385,7 +1467,7 @@ groq_backend = ChatOpenAI(
     base_url=GROQ_API_BASE,
     api_key=GROQ_API_KEY,
     temperature=0.7,
-).bind_tools(read_only_tools)  # Read-only access to files and resources
+).bind_tools(universal_tools)  # Bash-centric: bash, read, write
 
 BACKEND_PROMPT = """당신은 백엔드 개발 전문가입니다.
 
@@ -1405,7 +1487,7 @@ groq_frontend = ChatOpenAI(
     base_url=GROQ_API_BASE,
     api_key=GROQ_API_KEY,
     temperature=0.7,
-).bind_tools(read_only_tools)  # Read-only access to files and resources
+).bind_tools(universal_tools)  # Bash-centric: bash, read, write
 
 FRONTEND_PROMPT = """당신은 프론트엔드 개발 전문가입니다.
 
@@ -1425,7 +1507,7 @@ groq_sre = ChatOpenAI(
     base_url=GROQ_API_BASE,
     api_key=GROQ_API_KEY,
     temperature=0.3,
-).bind_tools(read_only_tools)  # Read-only access to files and resources
+).bind_tools(universal_tools)  # Bash-centric: bash, read, write
 
 SRE_PROMPT = """당신은 SRE(Site Reliability Engineer) 전문가입니다.
 
@@ -1450,7 +1532,7 @@ groq_yaml_manager = ChatOpenAI(
     base_url=GROQ_API_BASE,
     api_key=GROQ_API_KEY,
     temperature=0.3,
-)
+).bind_tools(universal_tools)  # Bash-centric: bash, read, write
 
 YAML_MANAGER_PROMPT = """당신은 Kubernetes YAML 파일 관리 및 자동 배포 전문가입니다.
 
@@ -1585,7 +1667,7 @@ def backend_node(state: AgentState) -> AgentState:
             tool_args = tool_call.get('args', {})
 
             try:
-                tool_func = next(t for t in read_only_tools if t.name == tool_name)
+                tool_func = next(t for t in all_tools if t.name == tool_name)
                 tool_result = tool_func.invoke(tool_args)
                 tool_outputs.append(f"\n🔧 **{tool_name}**: {tool_result}")
             except Exception as e:
@@ -1630,7 +1712,7 @@ def frontend_node(state: AgentState) -> AgentState:
             tool_args = tool_call.get('args', {})
 
             try:
-                tool_func = next(t for t in read_only_tools if t.name == tool_name)
+                tool_func = next(t for t in all_tools if t.name == tool_name)
                 tool_result = tool_func.invoke(tool_args)
                 tool_outputs.append(f"\n🔧 **{tool_name}**: {tool_result}")
             except Exception as e:
@@ -1675,7 +1757,7 @@ def sre_node(state: AgentState) -> AgentState:
             tool_args = tool_call.get('args', {})
 
             try:
-                tool_func = next(t for t in read_only_tools if t.name == tool_name)
+                tool_func = next(t for t in all_tools if t.name == tool_name)
                 tool_result = tool_func.invoke(tool_args)
                 tool_outputs.append(f"\n🔧 **{tool_name}**: {tool_result}")
             except Exception as e:
@@ -1707,10 +1789,7 @@ def yaml_manager_node(state: AgentState) -> AgentState:
     """Groq #4 - YAML Manager"""
     messages = state["messages"]
 
-    # Bind YAML manager tools to this agent
-    yaml_manager = groq_yaml_manager.bind_tools(yaml_manager_tools)
-
-    response = yaml_manager.invoke([
+    response = groq_yaml_manager.invoke([
         SystemMessage(content=YAML_MANAGER_PROMPT),
         HumanMessage(content=messages[-1]["content"])
     ])
@@ -1724,7 +1803,7 @@ def yaml_manager_node(state: AgentState) -> AgentState:
 
             # Execute tool
             try:
-                tool_func = next(t for t in yaml_manager_tools if t.name == tool_name)
+                tool_func = next(t for t in all_tools if t.name == tool_name)
                 tool_result = tool_func.invoke(tool_args)
                 tool_outputs.append(f"\n🔧 **{tool_name}**: {tool_result}")
             except Exception as e:
@@ -1733,7 +1812,7 @@ def yaml_manager_node(state: AgentState) -> AgentState:
         # Call agent again with tool results
         if tool_outputs:
             tool_context = "\n".join(tool_outputs)
-            response = yaml_manager.invoke([
+            response = groq_yaml_manager.invoke([
                 SystemMessage(content=YAML_MANAGER_PROMPT),
                 HumanMessage(content=messages[-1]["content"]),
                 HumanMessage(content=f"도구 실행 결과:\n{tool_context}")
