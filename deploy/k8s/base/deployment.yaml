@@ -53,6 +53,12 @@ spec:
             secretKeyRef:
               name: postgresql-root-password
               key: password
+        - name: GITEA_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: mas-api-keys
+              key: gitea-token
+              optional: true
         - name: REDIS_URL
           value: "redis://redis:6379/0"
         resources:
