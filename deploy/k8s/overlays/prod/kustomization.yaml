@@ -15,5 +15,5 @@ commonLabels:
 # 이미지 태그 설정 (ArgoCD Image Updater가 자동으로 업데이트)
 images:
   - name: gitea0213.kro.kr/bluemayne/mas
-    newTag: main-sha-c2478e77782ada7a8bc51de2f4f0ef4530dd67b2
+    newTag: main-sha-8c6d1b75226b381cc316b8a3df005ebab1bfde29
 
