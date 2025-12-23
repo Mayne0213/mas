@@ -20,7 +20,7 @@ class AgentState(TypedDict):
 
 # ===== 1. Claude Code - Orchestrator =====
 claude_orchestrator = ChatAnthropic(
-    model="claude-3-5-sonnet-latest",  # Always use latest version
+    model="claude-sonnet-4-5",  # Latest Claude Sonnet 4.5 (Sep 2025)
     api_key=os.getenv("ANTHROPIC_API_KEY"),
     temperature=0
 )
