@@ -5,10 +5,10 @@ namespace: mas
 
 resources:
   - namespace.yaml
-  - ../vault/mas-api-keys.yaml
-  - ../vault/mas-postgres.yaml
-  - ../vault/postgresql-root-password.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml
+  - mas-api-keys.yaml
+  - mas-postgres.yaml
+  - postgresql-root-password.yaml
 
