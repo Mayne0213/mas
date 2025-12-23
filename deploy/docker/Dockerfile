@@ -7,7 +7,12 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     git \
+    libpq-dev \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
+
+# pip 업그레이드
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # Python 의존성 설치
 COPY requirements.txt .
