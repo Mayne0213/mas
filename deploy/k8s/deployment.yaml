@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mas
+  namespace: mas
+  labels:
+    app: mas
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mas
+  template:
+    metadata:
+      labels:
+        app: mas
+    spec:
+      containers:
+      - name: mas
+        image: harbor.mayne.vcn/mas/platform:latest
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: mas-api-keys
+              key: anthropic-api-key
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: mas-api-keys
+              key: openai-api-key
+        - name: GOOGLE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: mas-api-keys
+              key: google-api-key
+        - name: GROQ_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: mas-api-keys
+              key: groq-api-key
+        - name: GROQ_API_BASE
+          value: "https://api.groq.com/openai/v1"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: mas-postgres
+              key: database-url
+        - name: REDIS_URL
+          value: "redis://redis:6379/0"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+

@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  mas:
+    build: ../../services/backend
+    container_name: mas
+    ports:
+      - "8000:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Groq API (OpenAI-compatible)
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GROQ_API_BASE=${GROQ_API_BASE:-https://api.groq.com/openai/v1}
+      # (optional) keep other providers
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - DATABASE_URL=postgresql+asyncpg://mas:mas@postgres:5432/mas
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - postgres
+      - ollama
+    volumes:
+      - ../../services/backend:/app
+    networks:
+      - mas-network
+
+  # Ollama (로컬 Qwen 모델)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mas-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - mas-network
+
+  # PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    container_name: mas-postgres
+    environment:
+      POSTGRES_DB: mas
+      POSTGRES_USER: mas
+      POSTGRES_PASSWORD: mas
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - mas-network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: mas-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - mas-network
+
+volumes:
+  ollama-data:
+  postgres-data:
+  redis-data:
+
+networks:
+  mas-network:
+    driver: bridge
+
