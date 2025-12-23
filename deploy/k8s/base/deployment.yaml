@@ -44,8 +44,8 @@ spec:
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: postgresql-password
-              key: postgres-password
+              name: postgresql-root-password
+              key: password
         - name: REDIS_URL
           value: "redis://redis:6379/0"
         resources:
