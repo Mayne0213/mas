@@ -61,6 +61,12 @@ def configure_git_repositories():
         return
 
     try:
+        # Add safe.directory to allow Git operations on mounted directories
+        # This is needed because the pod runs as root but files are owned by host user
+        subprocess.run(["git", "config", "--global", "--add", "safe.directory", "*"],
+                     timeout=5, check=True, capture_output=True)
+        print("✅ Added Git safe.directory configuration")
+
         # Configure git user for all repositories
         repos = [d for d in os.listdir(projects_path)
                 if os.path.isdir(os.path.join(projects_path, d)) and
