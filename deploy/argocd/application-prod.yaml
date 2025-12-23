@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: mas
+  name: mas-prod
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://gitea0213.kro.kr/bluemayne/mas.git
     targetRevision: main
-    path: deploy/k8s
+    path: deploy/k8s/overlays/prod
   destination:
     server: https://kubernetes.default.svc
     namespace: mas
