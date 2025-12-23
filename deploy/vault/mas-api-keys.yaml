@@ -1,0 +1,31 @@
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: mas-api-keys
+  namespace: mas
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-backend
+  target:
+    name: mas-api-keys
+    creationPolicy: Owner
+  data:
+    - secretKey: anthropic-api-key
+      remoteRef:
+        key: mas/api-keys
+        property: ANTHROPIC_API_KEY
+    - secretKey: groq-api-key
+      remoteRef:
+        key: mas/api-keys
+        property: GROQ_API_KEY
+    - secretKey: openai-api-key
+      remoteRef:
+        key: mas/api-keys
+        property: OPENAI_API_KEY
+    - secretKey: google-api-key
+      remoteRef:
+        key: mas/api-keys
+        property: GOOGLE_API_KEY
+

@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mas
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://gitea0213.kro.kr/bluemayne/mas.git
+    targetRevision: HEAD
+    path: deploy/k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mas
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+
