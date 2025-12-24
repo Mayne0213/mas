@@ -9,6 +9,7 @@ resources:
   - resourcequota.yaml
   - externalsecret.yaml
   - serviceaccount.yaml
+  - ../../../vault/mas-postgres.yaml
 
 commonLabels:
   environment: production
