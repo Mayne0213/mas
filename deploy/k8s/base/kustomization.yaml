@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - deployment.yaml
   - service.yaml
+  - ../../vault/mas-postgres.yaml
 
 commonLabels:
   app.kubernetes.io/name: mas
