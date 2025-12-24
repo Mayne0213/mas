@@ -60,6 +60,7 @@ nsenter를 통해 호스트 네임스페이스에 직접 접근합니다. SSH보
 - execute_host("kubectl logs mas-xxx -n mas --tail=50", use_sudo=True)
 
 **Projects 폴더 탐색:**
+Projects 폴더는 /home/ubuntu/Projects/ 에 있습니다 (oracle-master 서버).
 - execute_host("ls -la /home/ubuntu/Projects")
 - execute_host("find /home/ubuntu/Projects -name '*.git' -type d")
 - execute_host("cat /home/ubuntu/Projects/mas/README.md")
@@ -133,7 +134,12 @@ def research_node(state: AgentState) -> AgentState:
 
             # 도구 실행
             try:
-                tool_func = bash_tools[0]  # execute_bash
+                # tool_name에 따라 올바른 도구 선택
+                from tools.bash_tool import execute_bash, execute_host
+                if tool_name == "execute_host":
+                    tool_func = execute_host
+                else:
+                    tool_func = execute_bash
                 tool_result = tool_func.invoke(tool_args)
                 tool_outputs.append(f"\n🔧 **{tool_name}({tool_args.get('command', '')})**:\n{tool_result}")
             except Exception as e:

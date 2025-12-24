@@ -21,9 +21,9 @@ ORCHESTRATOR_PROMPT = """당신은 Multi-Agent System의 **총괄 조율자(Orch
 
 ## ⚠️ 시스템 환경
 - **실행 위치**: Docker 컨테이너 (/app/)
-- **호스트 접근**: SSH 필요 (ubuntu@172.17.0.1)
-- **Projects 경로**: /home/ubuntu/Projects/ (호스트)
-- **Kubernetes**: kubectl은 호스트에서만 작동 (SSH + sudo 필요)
+- **호스트 접근**: nsenter를 통한 직접 접근 (SSH 불필요)
+- **Projects 경로**: /home/ubuntu/Projects/ (oracle-master 서버)
+- **Kubernetes**: kubectl은 호스트에서만 작동 (sudo 필요)
 
 ## 역할
 - 사용자 요청을 분석하고 적절한 에이전트에게 작업 위임
@@ -117,7 +117,12 @@ def orchestrator_node(state: AgentState) -> AgentState:
             tool_args = tool_call.get('args', {})
 
             try:
-                tool_func = bash_tools[0]
+                # tool_name에 따라 올바른 도구 선택
+                from tools.bash_tool import execute_bash, execute_host
+                if tool_name == "execute_host":
+                    tool_func = execute_host
+                else:
+                    tool_func = execute_bash
                 tool_result = tool_func.invoke(tool_args)
                 tool_outputs.append(f"\n🔧 **Orchestrator {tool_name}({tool_args.get('command', '')[:50]}...)**:\n{tool_result}")
             except Exception as e:
