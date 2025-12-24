@@ -1,21 +1,39 @@
 # MAS (Multi-Agent System)
 
-MAS is a unified UI and orchestration layer for multiple AI agents (similar to ChatGPT, Claude, Gemini), running on your own Kubernetes cluster.
+**K8s Infrastructure Planning System** - AI agents that analyze your Kubernetes cluster and generate implementation plans.
 
-## 🎯 Architecture
+## 🎯 What is this?
 
-### Agents
-- **Claude Code (Orchestrator)**: overall coordinator & DevOps expert  
-- **Qwen Backend**: backend engineer (FastAPI, Node.js)  
-- **Qwen Frontend**: frontend engineer (Next.js, React)  
-- **Qwen SRE**: monitoring & reliability engineer  
+MAS는 Kubernetes 클러스터 상태를 분석하고, 인프라 배포 계획을 수립하는 AI 에이전트 시스템입니다.
+
+**사용 시나리오:**
+1. "Tekton을 도입하고 싶어" → 클러스터 분석 → YAML 구조 설계 → 구현 가이드 생성
+2. 생성된 Markdown 프롬프트를 복사해서 다른 AI (Claude Code, ChatGPT 등)에 붙여넣기
+3. 실제 코드 구현은 다른 AI가 담당
+
+## 🤖 Agents
+
+### Planning Agent (Claude 4.5)
+- 폴더 구조 설계 (deploy/tool/base, overlays/prod, etc.)
+- YAML 파일 조직화
+- K8s 리소스 계획 (Namespace, Deployment, Service, etc.)
+
+### Research Agent (Groq Llama 3.3)
+- kubectl 명령어로 클러스터 상태 분석
+- 기존 리소스 확인 (namespaces, storage classes, quotas)
+- 호환성 검토
+
+### Prompt Generator (Claude 4.5)
+- Markdown 형식의 구현 가이드 생성
+- YAML 예시 포함
+- 검증 명령어 제공
 
 ### Tech stack
-- **Backend**: LangGraph + LangChain + FastAPI  
-- **UI**: Chainlit (chat-style UI)  
-- **Database**: PostgreSQL (CNPG)  
-- **Cache**: Redis  
-- **LLMs**: Claude API + **Groq Llama 3.x** (OpenAI-compatible API)  
+- **Backend**: LangGraph + LangChain + FastAPI
+- **UI**: Chainlit (chat-style UI)
+- **Database**: PostgreSQL (CNPG)
+- **Cache**: Redis
+- **LLMs**: Claude API (Orchestrator, Planning, Prompt Gen) + Groq Llama 3.3 (Research)
 - **Deploy**: Kubernetes + ArgoCD  
 
 ---
@@ -195,61 +213,82 @@ Examples:
 
 ## 📝 Usage examples
 
-### Backend API request
+### Example 1: Deploy Tekton
 
 ```text
-User: "Create a signup API with FastAPI.
-       Use PostgreSQL and JWT tokens."
+User: "Tekton을 도입하고 싶어"
 
 🎼 Orchestrator:
-  → routes to Qwen Backend
+  → routes to Planning Agent
 
-⚙️ Qwen Backend:
-  → generates FastAPI router, Pydantic models, DB schema, JWT logic
+📋 Planning Agent:
+  → designs folder structure: deploy/tekton/{base,overlays/prod}
+  → plans K8s resources: Namespace, RBAC, Deployments, Services
+  → identifies research needs
 
-🎼 Orchestrator:
-  → reviews, suggests improvements, and outputs final code snippet & file layout
+🔍 Research Agent:
+  → runs: kubectl get namespaces, kubectl get storageclasses
+  → checks: existing tekton resources, cluster version
+  → analyzes: available resources and quotas
+
+📝 Prompt Generator:
+  → generates comprehensive Markdown implementation guide
+  → includes: YAML examples, folder structure, validation commands
+
+✨ Output: Markdown prompt ready to copy-paste into Claude Code/ChatGPT
 ```
 
-### Frontend component request
+### Example 2: Deploy Harbor Registry
 
 ```text
-User: "Build a responsive dashboard chart component using Recharts."
+User: "Harbor를 배포하려고 해"
 
-🎼 Orchestrator:
-  → routes to Qwen Frontend
+→ Planning: folder structure + YAML organization
+→ Research: storage classes, ingress controllers, TLS setup
+→ Prompt Gen: Markdown guide with Harbor Helm values, ingress config, etc.
 
-🎨 Qwen Frontend:
-  → generates a Next.js/React component with TypeScript and responsive styles
-
-🎼 Orchestrator:
-  → explains how to integrate it into your existing app
+✨ Copy the prompt → Paste into another AI → Get actual implementation
 ```
 
-### Infra / SRE request
+### Example 3: Deploy Prometheus
 
 ```text
-User: "Prometheus is firing high memory alerts for the PostgreSQL pod.
-       Help me stabilize it."
+User: "Prometheus를 설치하고 싶어"
 
-🎼 Orchestrator:
-  → routes to Qwen SRE
+→ Planning: monitoring stack structure (Prometheus, Grafana, AlertManager)
+→ Research: existing ServiceMonitors, PVC requirements
+→ Prompt Gen: Complete implementation guide
 
-📊 Qwen SRE:
-  → analyzes metrics & logs (conceptually),
-    proposes tuning (Postgres config, indexes, pooler),
-    and suggests alert threshold adjustments.
+✨ Result: Ready-to-use prompt for code generation
 ```
 
 ---
 
+## 🔧 Workflow
+
+```
+User Input: "Deploy X"
+     ↓
+Orchestrator (조율)
+     ↓
+Planning Agent (구조 설계)
+     ↓
+Research Agent (클러스터 분석)
+     ↓
+Prompt Generator (가이드 생성)
+     ↓
+Output: Markdown Implementation Guide
+     ↓
+User copies → Pastes to Claude Code/ChatGPT → Gets actual code
+```
+
 ## 🤝 Contributing
 
 Contributions are welcome:
-- New agents (e.g., data engineer, security engineer)  
-- New tools (Harbor, Tekton, CNPG, MetalLB integrations)  
-- Better prompts and workflows  
-- Docs and examples  
+- Improve Planning Agent prompts for better folder structures
+- Enhance Research Agent kubectl commands
+- Add more infrastructure tools (Harbor, Tekton, CNPG, MetalLB, etc.)
+- Better Markdown template for Prompt Generator
 
 Feel free to open issues or PRs in your Git repository.
 
