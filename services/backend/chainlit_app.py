@@ -6,20 +6,16 @@ from workflow import mas_graph
 from agents import AgentState
 import os
 from dotenv import load_dotenv
-from functools import wraps
+import contextvars
 
 load_dotenv()
 
-# Chainlit의 자동 Step 래핑 비활성화
-def disable_auto_step(func):
-    """Disable Chainlit's automatic step wrapping"""
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        return await func(*args, **kwargs)
-    wrapper.__wrapped__ = func
-    # Chainlit이 확인하는 속성 설정
-    wrapper._no_step = True
-    return wrapper
+# Chainlit의 local_steps ContextVar 초기화
+try:
+    from chainlit.step import local_steps
+    local_steps.set([])
+except:
+    pass
 
 
 @cl.on_chat_start
@@ -44,9 +40,15 @@ async def start():
 
 
 @cl.on_message
-@disable_auto_step
 async def main(message: cl.Message):
     """메시지 수신 시"""
+    
+    # local_steps ContextVar 초기화
+    try:
+        from chainlit.step import local_steps
+        local_steps.set([])
+    except:
+        pass
     
     try:
         # 초기 상태
