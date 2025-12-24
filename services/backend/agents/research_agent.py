@@ -11,13 +11,13 @@ import json
 import re
 
 
-# Groq 모델 초기화 (OpenAI 호환)
-groq_research = ChatOpenAI(
-    model="llama-3.3-70b-versatile",
-    api_key=os.getenv("GROQ_API_KEY"),
-    base_url="https://api.groq.com/openai/v1",
+# Claude 4.5 모델 초기화
+claude_prompt_gen = ChatAnthropic(
+    model="claude-sonnet-4-20250514",
+    api_key=os.getenv("ANTHROPIC_API_KEY"),
     temperature=0.3
 )
+
 
 
 RESEARCH_PROMPT = """Research Agent: Analyze cluster or retrieve information.
