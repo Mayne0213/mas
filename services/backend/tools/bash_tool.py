@@ -2,6 +2,7 @@
 Bash 명령어 실행 도구
 """
 import subprocess
+import shlex
 from langchain_core.tools import tool
 from typing import Optional
 
@@ -95,12 +96,13 @@ def execute_host(command: str, timeout: int = 30, use_sudo: bool = False) -> str
         # This allows commands to work from SSH initial directory
         if use_sudo:
             # For sudo commands, run directly with sudo
-            nsenter_command = f"nsenter -t 1 -m -u -n -i -- sh -c {subprocess.list2cmdline([f'sudo {command}'])}"
+            # Use shlex.quote to safely quote the command while preserving shell expansion
+            nsenter_command = f"nsenter -t 1 -m -u -n -i -- sh -c {shlex.quote(f'sudo {command}')}"
         else:
             # For regular commands, run as ubuntu user
             # Use 'su ubuntu -c' (not 'su - ubuntu -c') to preserve current directory
             # This matches SSH behavior where you start from the initial directory
-            nsenter_command = f"nsenter -t 1 -m -u -n -i -- su ubuntu -c {subprocess.list2cmdline([command])}"
+            nsenter_command = f"nsenter -t 1 -m -u -n -i -- su ubuntu -c {shlex.quote(command)}"
 
         result = subprocess.run(
             nsenter_command,

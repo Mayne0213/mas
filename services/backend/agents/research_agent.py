@@ -205,44 +205,10 @@ def research_node(state: AgentState) -> AgentState:
                         state["current_agent"] = "end"
 
                     else:
-                        # 배포 분석: 상세 정보 표시
-                        cluster_info = commands_data.get("cluster_info", {})
-                        findings = commands_data.get("findings", [])
-                        summary = commands_data.get("summary", "")
+                        # 배포 분석: 간단한 상태만 표시 (Decision agent가 상세 결과 표시)
+                        final_content = "✅ 분석 완료"
 
-                        summary_parts = ["✅ 분석 완료\n"]
-
-                        # 요약 추가
-                        if summary:
-                            summary_parts.append(f"{summary}\n")
-
-                        # 클러스터 정보
-                        if cluster_info:
-                            summary_parts.append("**클러스터 정보**")
-                            if cluster_info.get("k8s_version"):
-                                summary_parts.append(f"- Kubernetes: {cluster_info['k8s_version']}")
-                            if cluster_info.get("nodes"):
-                                summary_parts.append(f"- 노드: {cluster_info['nodes']}")
-                            if cluster_info.get("existing_tools"):
-                                tools = ", ".join(cluster_info['existing_tools'])
-                                summary_parts.append(f"- 기존 도구: {tools}")
-
-                        # 주요 발견사항
-                        if findings:
-                            summary_parts.append("\n**주요 발견사항**")
-                            for finding in findings[:5]:  # 최대 5개만
-                                category = finding.get("category", "")
-                                data = finding.get("data", "")
-                                if category and data:
-                                    summary_parts.append(f"- {category}: {data}")
-
-                        # 만약 아무 데이터도 없으면 원본 응답 사용
-                        if len(summary_parts) == 1 and not summary:
-                            summary_parts.append(f"\n{response_text}")
-
-                        final_content = "\n".join(summary_parts)
-
-                        # 배포 분석은 orchestrator로 돌아감
+                        # 배포 분석은 orchestrator로 돌아감 (decision으로 이동)
                         state["current_agent"] = "orchestrator"
 
                     state["research_data"] = commands_data
@@ -259,8 +225,15 @@ def research_node(state: AgentState) -> AgentState:
         if not commands_executed:
             print("\n✅ 명령어 요청 없음, Claude 응답을 그대로 사용")
 
-            # Claude의 원본 응답을 사용
-            content = f"✅ 분석 완료\n\n{response_text}"
+            # 요청 유형에 따라 다른 출력
+            if request_type == "information_query":
+                # 정보 조회: Claude 응답을 그대로 표시
+                content = f"✅ 조회 완료\n\n{response_text}"
+                state["current_agent"] = "end"
+            else:
+                # 배포 분석: 간단한 메시지만 (Decision agent가 상세 결과 표시)
+                content = "✅ 분석 완료"
+                state["current_agent"] = "orchestrator"
 
             state["research_data"] = {
                 "summary": "정보 수집 완료",
@@ -271,33 +244,51 @@ def research_node(state: AgentState) -> AgentState:
                 "role": "research",
                 "content": content
             })
-            state["current_agent"] = "orchestrator"
             return state
     
     # 최대 반복 도달
     print(f"\n⚠️ 최대 반복 횟수 도달 ({max_iterations})")
 
-    # 수집된 도구 출력이 있으면 사용
-    if tool_outputs:
-        outputs_text = "\n\n".join(tool_outputs)
-        content = f"✅ 분석 완료\n\n**수집된 정보:**\n{outputs_text}"
-        state["research_data"] = {
-            "summary": "정보 수집 완료",
-            "findings": [{"category": "클러스터 정보", "data": outputs_text}],
-            "recommendations": []
-        }
+    # 요청 유형에 따라 다른 출력
+    if request_type == "information_query":
+        # 정보 조회: 수집된 정보 표시
+        if tool_outputs:
+            outputs_text = "\n\n".join(tool_outputs)
+            content = f"✅ 조회 완료\n\n**수집된 정보:**\n{outputs_text}"
+            state["research_data"] = {
+                "summary": "정보 수집 완료",
+                "findings": [{"category": "클러스터 정보", "data": outputs_text}],
+                "recommendations": []
+            }
+        else:
+            content = "✅ 조회 완료\n\n⚠️ 충분한 정보를 수집하지 못했습니다."
+            state["research_data"] = {
+                "summary": "정보 수집 불완전",
+                "findings": [{"category": "경고", "data": "추가 정보 필요"}],
+                "recommendations": []
+            }
+        state["current_agent"] = "end"
     else:
-        content = "✅ 분석 완료\n\n⚠️ 충분한 정보를 수집하지 못했습니다. 수동으로 확인해주세요."
-        state["research_data"] = {
-            "summary": "정보 수집 불완전",
-            "findings": [{"category": "경고", "data": "추가 정보 필요"}],
-            "recommendations": []
-        }
+        # 배포 분석: 간단한 메시지만 (Decision agent가 상세 결과 표시)
+        content = "✅ 분석 완료"
+        if tool_outputs:
+            outputs_text = "\n\n".join(tool_outputs)
+            state["research_data"] = {
+                "summary": "정보 수집 완료",
+                "findings": [{"category": "클러스터 정보", "data": outputs_text}],
+                "recommendations": []
+            }
+        else:
+            state["research_data"] = {
+                "summary": "정보 수집 불완전",
+                "findings": [{"category": "경고", "data": "추가 정보 필요"}],
+                "recommendations": []
+            }
+        state["current_agent"] = "orchestrator"
 
     state["messages"].append({
         "role": "research",
         "content": content
     })
-    state["current_agent"] = "orchestrator"
 
     return state
