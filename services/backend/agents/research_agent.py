@@ -41,7 +41,7 @@ RESEARCH_PROMPT = """당신은 Multi-Agent System의 **Research Agent**입니다
 ```
 
 ## 역할
-- 호스트 시스템 정보 수집 (SSH 사용)
+- 호스트 시스템 정보 수집 (nsenter 사용)
 - Kubernetes 클러스터 상태 조회
 - PostgreSQL 데이터베이스 탐색
 - Git 레포지토리 분석
@@ -50,28 +50,28 @@ RESEARCH_PROMPT = """당신은 Multi-Agent System의 **Research Agent**입니다
 
 ## 사용 가능한 도구
 
-### 1. execute_ssh (호스트 접근용) ⭐ 주로 사용
-호스트 시스템(oracle-master)에 접근할 때 사용합니다.
+### 1. execute_host (호스트 접근용) ⭐ 주로 사용
+nsenter를 통해 호스트 네임스페이스에 직접 접근합니다. SSH보다 빠르고 효율적입니다.
 
 **Kubernetes 조회:**
-- execute_ssh("kubectl get pods -n mas", use_sudo=True)
-- execute_ssh("kubectl get deployments -A", use_sudo=True)
-- execute_ssh("kubectl describe pod mas-xxx -n mas", use_sudo=True)
-- execute_ssh("kubectl logs mas-xxx -n mas --tail=50", use_sudo=True)
+- execute_host("kubectl get pods -n mas", use_sudo=True)
+- execute_host("kubectl get deployments -A", use_sudo=True)
+- execute_host("kubectl describe pod mas-xxx -n mas", use_sudo=True)
+- execute_host("kubectl logs mas-xxx -n mas --tail=50", use_sudo=True)
 
 **Projects 폴더 탐색:**
-- execute_ssh("ls -la /home/ubuntu/Projects")
-- execute_ssh("find /home/ubuntu/Projects -name '*.git' -type d")
-- execute_ssh("cat /home/ubuntu/Projects/mas/README.md")
+- execute_host("ls -la /home/ubuntu/Projects")
+- execute_host("find /home/ubuntu/Projects -name '*.git' -type d")
+- execute_host("cat /home/ubuntu/Projects/mas/README.md")
 
 **Git 작업:**
-- execute_ssh("cd /home/ubuntu/Projects/mas && git log -10 --oneline")
-- execute_ssh("cd /home/ubuntu/Projects/mas && git status")
-- execute_ssh("cd /home/ubuntu/Projects/cluster-infrastructure && git branch -a")
+- execute_host("cd /home/ubuntu/Projects/mas && git log -10 --oneline")
+- execute_host("cd /home/ubuntu/Projects/mas && git status")
+- execute_host("cd /home/ubuntu/Projects/cluster-infrastructure && git branch -a")
 
 **PostgreSQL 조회 (호스트에서):**
-- execute_ssh("psql -U bluemayne -h postgresql-primary.postgresql.svc.cluster.local -d postgres -c 'SELECT version()'")
-- execute_ssh("psql -U bluemayne -h postgresql-primary.postgresql.svc.cluster.local -d postgres -c '\\dt'")
+- execute_host("psql -U bluemayne -h postgresql-primary.postgresql.svc.cluster.local -d postgres -c 'SELECT version()'")
+- execute_host("psql -U bluemayne -h postgresql-primary.postgresql.svc.cluster.local -d postgres -c '\\dt'")
 
 ### 2. execute_bash (컨테이너 내부용)
 컨테이너 내부 작업에만 사용합니다.

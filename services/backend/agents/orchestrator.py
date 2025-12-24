@@ -34,10 +34,11 @@ ORCHESTRATOR_PROMPT = """당신은 Multi-Agent System의 **총괄 조율자(Orch
 
 ## 사용 가능한 도구
 
-### execute_ssh (호스트 접근용) ⭐ 주로 사용
-- Kubernetes: execute_ssh("kubectl get pods -n mas", use_sudo=True)
-- Projects: execute_ssh("ls -la /home/ubuntu/Projects")
-- Git: execute_ssh("cd /home/ubuntu/Projects/mas && git status")
+### execute_host (호스트 접근용) ⭐ 주로 사용
+nsenter를 통해 호스트 네임스페이스에 직접 접근합니다.
+- Kubernetes: execute_host("kubectl get pods -n mas", use_sudo=True)
+- Projects: execute_host("ls -la /home/ubuntu/Projects")
+- Git: execute_host("cd /home/ubuntu/Projects/mas && git status")
 
 ### execute_bash (컨테이너 내부용)
 - 컨테이너 파일 조회: execute_bash("ls -la /app")
