@@ -169,13 +169,22 @@ def research_node(state: AgentState) -> AgentState:
                     # 결과를 대화에 추가 (최신 것만 유지)
                     results_text = "\n\n".join(results)
                     tool_outputs.append(results_text)
+
+                    # 요청 유형에 따라 다른 지시
+                    if request_type == "information_query":
+                        # 정보 조회: 바로 최종 리포트 작성 지시
+                        next_instruction = f"명령어 실행 결과:\n\n{results_text}\n\n**이제 위 결과를 바탕으로 최종 리포트를 JSON 형식으로 작성하세요. 추가 명령어 없이 바로 리포트를 제출하세요.**\n\n형식:\n{{\n  \"summary\": \"정보 조회 완료\",\n  \"result\": \"사용자 질문에 대한 답변\",\n  \"findings\": [{{\"category\": \"조회 결과\", \"data\": \"...\"}}]\n}}"
+                    else:
+                        # 배포 분석: 선택권 제공
+                        next_instruction = f"명령어 실행 결과:\n\n{results_text}\n\n계속 정보가 필요하면 추가 명령어를 요청하고, 충분한 정보를 수집했으면 최종 리포트를 JSON으로 제공해주세요."
+
                     # 전체 히스토리 대신 시스템 프롬프트 + 초기 요청 + 최신 결과만 유지
                     conversation = [
                         SystemMessage(content=RESEARCH_PROMPT),
                         HumanMessage(content=research_request),
-                        HumanMessage(content=f"명령어 실행 결과:\n\n{results_text}\n\n계속 정보가 필요하면 추가 명령어를 요청하고, 충분한 정보를 수집했으면 최종 리포트를 JSON으로 제공해주세요.")
+                        HumanMessage(content=next_instruction)
                     ]
-                    
+
                     continue  # 다음 반복으로
                     
                 # 최종 리포트인 경우
@@ -251,10 +260,33 @@ def research_node(state: AgentState) -> AgentState:
 
     # 요청 유형에 따라 다른 출력
     if request_type == "information_query":
-        # 정보 조회: 수집된 정보 표시
+        # 정보 조회: 수집된 정보를 바탕으로 사용자 친화적인 답변 생성
         if tool_outputs:
             outputs_text = "\n\n".join(tool_outputs)
-            content = f"✅ 조회 완료\n\n**수집된 정보:**\n{outputs_text}"
+
+            # Claude에게 결과 해석 요청
+            print("\n📝 결과 해석 요청 중...")
+            interpretation_prompt = f"""수집된 정보를 바탕으로 사용자 질문에 답변해주세요.
+
+**사용자 질문:** {user_message}
+
+**수집된 정보:**
+{outputs_text}
+
+위 정보를 바탕으로:
+1. 사용자 질문에 직접적으로 답변
+2. 한국어로 간결하게 작성
+3. 핵심 정보만 포함
+4. 기술적 세부사항은 필요시에만 포함
+
+답변:"""
+
+            interpretation_response = claude_research.invoke([
+                HumanMessage(content=interpretation_prompt)
+            ])
+
+            content = f"✅ 조회 완료\n\n{interpretation_response.content}"
+
             state["research_data"] = {
                 "summary": "정보 수집 완료",
                 "findings": [{"category": "클러스터 정보", "data": outputs_text}],
