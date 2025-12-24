@@ -84,20 +84,44 @@ def review_node(state: AgentState) -> AgentState:
     tool_outputs = []
     if hasattr(response, 'tool_calls') and response.tool_calls:
         for tool_call in response.tool_calls:
-            tool_name = tool_call['name']
-            tool_args = tool_call.get('args', {})
-
             try:
+                tool_name = tool_call.get('name') or tool_call.get('function', {}).get('name', 'unknown')
+                tool_args_raw = tool_call.get('args') or tool_call.get('function', {}).get('arguments', {})
+                
+                # tool_args가 문자열인 경우 JSON 파싱 시도
+                if isinstance(tool_args_raw, str):
+                    try:
+                        tool_args = json.loads(tool_args_raw)
+                    except json.JSONDecodeError:
+                        # JSON 파싱 실패 시 빈 딕셔너리 사용
+                        tool_args = {}
+                        print(f"⚠️ Failed to parse tool_args as JSON: {tool_args_raw}")
+                elif isinstance(tool_args_raw, dict):
+                    tool_args = tool_args_raw
+                else:
+                    tool_args = {}
+                    print(f"⚠️ Unexpected tool_args type: {type(tool_args_raw)}")
+
                 # tool_name에 따라 올바른 도구 선택
                 from tools.bash_tool import execute_bash, execute_host
                 if tool_name == "execute_host":
                     tool_func = execute_host
                 else:
                     tool_func = execute_bash
+                
+                # 필수 파라미터 확인
+                if 'command' not in tool_args:
+                    tool_outputs.append(f"\n❌ **{tool_name}** failed: 'command' parameter is required")
+                    continue
+                
                 tool_result = tool_func.invoke(tool_args)
                 tool_outputs.append(f"\n🔧 **Review {tool_name}({tool_args.get('command', '')[:50]}...)**:\n{tool_result}")
             except Exception as e:
-                tool_outputs.append(f"\n❌ **{tool_name}** failed: {str(e)}")
+                error_detail = str(e)
+                import traceback
+                print(f"❌ Tool call error: {error_detail}")
+                print(traceback.format_exc())
+                tool_outputs.append(f"\n❌ **{tool_name if 'tool_name' in locals() else 'unknown'}** failed: {error_detail}")
 
         # Tool 결과와 함께 재호출
         if tool_outputs:
