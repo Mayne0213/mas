@@ -82,18 +82,20 @@ def execute_host(command: str, timeout: int = 30, use_sudo: bool = False) -> str
         - execute_host("psql -U bluemayne -h postgresql-primary.postgresql.svc.cluster.local -d postgres -c 'SELECT version()'")
     """
     try:
-        # Add sudo if requested
-        if use_sudo:
-            command = f"sudo {command}"
-
         # Use nsenter to enter host namespaces
         # -t 1: target PID 1 (init process on host)
         # -m: mount namespace
         # -u: UTS namespace (hostname)
         # -n: network namespace
         # -i: IPC namespace
-        # Wrap command in sh -c to properly handle shell operators (&&, ||, |, etc.)
-        nsenter_command = f"nsenter -t 1 -m -u -n -i -- sh -c {subprocess.list2cmdline([command])}"
+        # Run as ubuntu user to avoid git "dubious ownership" errors
+        # Use 'su - ubuntu -c' for user commands, 'sudo' for privileged commands
+        if use_sudo:
+            # For sudo commands, run directly with sudo
+            nsenter_command = f"nsenter -t 1 -m -u -n -i -- sh -c {subprocess.list2cmdline([f'sudo {command}'])}"
+        else:
+            # For regular commands, run as ubuntu user
+            nsenter_command = f"nsenter -t 1 -m -u -n -i -- su - ubuntu -c {subprocess.list2cmdline([command])}"
 
         result = subprocess.run(
             nsenter_command,
