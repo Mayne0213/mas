@@ -92,7 +92,8 @@ def execute_host(command: str, timeout: int = 30, use_sudo: bool = False) -> str
         # -u: UTS namespace (hostname)
         # -n: network namespace
         # -i: IPC namespace
-        nsenter_command = f"nsenter -t 1 -m -u -n -i -- {command}"
+        # Wrap command in sh -c to properly handle shell operators (&&, ||, |, etc.)
+        nsenter_command = f"nsenter -t 1 -m -u -n -i -- sh -c {subprocess.list2cmdline([command])}"
 
         result = subprocess.run(
             nsenter_command,
