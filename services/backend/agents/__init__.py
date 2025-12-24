@@ -6,6 +6,7 @@ from .state import AgentState
 from .orchestrator import orchestrator_node
 from .planning_agent import planning_node
 from .research_agent import research_node
+from .decision_agent import decision_node
 from .prompt_generator_agent import prompt_generator_node
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     'orchestrator_node',
     'planning_node',
     'research_node',
+    'decision_node',
     'prompt_generator_node',
 ]

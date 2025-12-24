@@ -20,32 +20,60 @@ claude_orchestrator = ChatAnthropic(
 ORCHESTRATOR_PROMPT = """You are the Orchestrator of a K8s Analysis & Decision System.
 
 ## Role
-Coordinate agents to analyze cluster and provide deployment recommendations.
+Determine request type and route to appropriate agents.
+
+## Request Types
+
+### Type 1: Information Query (정보 조회)
+Keywords: "알려줘", "조회", "확인", "보여줘", "찾아줘", "검색", "상태", "비밀번호", "목록", "리스트"
+Examples:
+- "PostgreSQL 비밀번호 알려줘"
+- "현재 Pod 상태 확인해줘"
+- "Secret 목록 보여줘"
+Workflow: research → end
+
+### Type 2: Deployment Decision (도입 결정)
+Keywords: "도입", "설치", "배포", "필요", "결정", "추천", "분석", "사용"
+Examples:
+- "Tekton 도입할까?"
+- "Harbor가 필요한지 분석해줘"
+Workflow: planning → research → prompt_generator → end
 
 ## Available Agents
-- planning: Understand what user wants to deploy and what info is needed
-- research: Analyze K8s cluster state (kubectl commands)
-- prompt_generator: Generate Korean recommendation report (추천/비추천 결정)
+- planning: Plan deployment requirements (deployment_decision only)
+- research: Analyze cluster state or retrieve information
+- decision: Make final decision (추천/비추천) (deployment_decision only)
+- prompt_generator: Generate implementation guide for other AI (deployment_decision, only if approved)
 - end: Complete the task
 
-## Workflow
-1. User asks: "X를 도입하고 싶어" or "X 사용 여부를 결정해줘"
-2. Planning → what would be needed for X
-3. Research → analyze current cluster state
-4. Prompt Generator → Korean recommendation (도입 추천/비추천)
-5. End → show final decision to user
-
 ## Decision Logic
-- No plan → NEXT_AGENT: planning
-- Plan exists, no research → NEXT_AGENT: research
-- Research done, no recommendation → NEXT_AGENT: prompt_generator
-- Recommendation ready → NEXT_AGENT: end
+
+**First, determine request_type (첫 호출 시만):**
+- If user wants information → request_type = "information_query"
+- If user wants deployment decision → request_type = "deployment_decision"
+
+**Then route based on request_type:**
+
+### For information_query:
+- Current state: start → NEXT_AGENT: research
+- Current state: research done → NEXT_AGENT: end
+
+### For deployment_decision:
+- Current state: start → NEXT_AGENT: planning
+- Current state: planning done → NEXT_AGENT: research
+- Current state: research done → NEXT_AGENT: decision
+- Current state: decision done (추천) → NEXT_AGENT: prompt_generator
+- Current state: decision done (비추천) → NEXT_AGENT: end
+- Current state: prompt_generator done → NEXT_AGENT: end
+
+Check state.get("task_plan"), state.get("research_data"), state.get("decision_report"), state.get("implementation_prompt") to determine current progress.
 
 ## Output Format
+REQUEST_TYPE: <information_query|deployment_decision>
 NEXT_AGENT: <agent_name>
 REASON: <brief reason>
 
-Keep workflow simple: planning → research → prompt_generator → end.
+Analyze user intent carefully to choose the correct request type.
 """
 
 
@@ -114,6 +142,15 @@ def orchestrator_node(state: AgentState) -> AgentState:
     if tool_outputs:
         content = "\n".join(tool_outputs) + "\n\n" + content
 
+    # 요청 타입 파싱
+    request_type = state.get("request_type")  # 기존 값 유지
+    if "REQUEST_TYPE:" in content and not request_type:
+        for line in content.split("\n"):
+            if line.startswith("REQUEST_TYPE:"):
+                request_type = line.split(":")[1].strip()
+                state["request_type"] = request_type
+                break
+
     # 다음 에이전트 파싱
     next_agent = "planning"  # 기본값
     if "NEXT_AGENT:" in content:
@@ -121,6 +158,29 @@ def orchestrator_node(state: AgentState) -> AgentState:
             if line.startswith("NEXT_AGENT:"):
                 next_agent = line.split(":")[1].strip()
                 break
+
+    # request_type에 따른 라우팅 보정
+    if request_type == "information_query":
+        # 정보 조회: Planning 건너뛰기
+        if next_agent == "planning":
+            next_agent = "research"
+    elif request_type == "deployment_decision":
+        # 의사결정: 순서 보장 (planning → research → decision → prompt_generator(추천시만) → end)
+        task_plan = state.get("task_plan")
+        research_data = state.get("research_data")
+        decision_report = state.get("decision_report")
+        implementation_prompt = state.get("implementation_prompt")
+
+        if not task_plan:
+            next_agent = "planning"
+        elif not research_data:
+            next_agent = "research"
+        elif not decision_report:
+            next_agent = "decision"
+        elif decision_report and decision_report.get("recommendation") == "approve" and not implementation_prompt:
+            next_agent = "prompt_generator"
+        else:
+            next_agent = "end"
 
     # 메시지 추가
     state["messages"].append({

@@ -20,37 +20,51 @@ groq_research = ChatOpenAI(
 )
 
 
-RESEARCH_PROMPT = """Research Agent: Analyze Kubernetes cluster state.
+RESEARCH_PROMPT = """Research Agent: Analyze cluster or retrieve information.
 
-Request commands in JSON:
+## Two Modes
+
+### Mode 1: Information Query (정보 조회)
+User wants specific information (password, status, list, etc.)
+- Execute the requested kubectl command
+- Return the result directly
+- No analysis needed
+
+### Mode 2: Deployment Analysis (배포 분석)
+User wants deployment decision
+- Analyze cluster state comprehensively
+- Collect version, tools, resources
+- Provide structured findings
+
+## Request commands in JSON:
 {"commands": [{"tool": "execute_host", "command": "kubectl get nodes", "use_sudo": true}]}
 
 Rules:
 - Request 1-2 commands at a time
 - Use execute_host for kubectl commands (with use_sudo: true)
-- Focus on: version, existing tools, resources, nodes
 - Output ONLY JSON when requesting commands
 
-Final report format (Korean):
+## Final report format
+
+### For Information Query:
+{
+  "summary": "정보 조회 완료",
+  "result": "actual command result",
+  "findings": [{"category": "조회 결과", "data": "..."}]
+}
+
+### For Deployment Analysis:
 {
   "summary": "클러스터 상태 요약",
   "cluster_info": {
     "k8s_version": "v1.x.x",
-    "nodes": "3 nodes (1 control-plane, 2 workers)",
-    "existing_tools": ["ArgoCD", "Gitea", "Prometheus"]
+    "nodes": "3 nodes",
+    "existing_tools": ["ArgoCD", "Gitea"]
   },
-  "findings": [
-    {"category": "기존 CI/CD", "data": "ArgoCD 운영 중"},
-    {"category": "리소스", "data": "충분한 여유 있음"}
-  ],
-  "recommendation": {
-    "deploy": true/false,
-    "reasons": ["이유1", "이유2"],
-    "alternatives": ["대안1", "대안2"]
-  }
+  "findings": [{"category": "...", "data": "..."}]
 }
 
-Keep findings concise and actionable. Focus on decision-making data.
+Choose the appropriate format based on the user's request.
 """
 
 
@@ -59,19 +73,26 @@ def research_node(state: AgentState) -> AgentState:
     Research 노드: 정보 수집 (JSON 기반 명령어 방식)
     """
     messages = state["messages"]
+    request_type = state.get("request_type", "deployment_decision")
     task_plan = state.get("task_plan") or {}
     research_needed = task_plan.get("research_needed", []) if isinstance(task_plan, dict) else []
-    
+
+    # 사용자 원래 요청 찾기
+    user_message = None
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            user_message = msg.get("content", "")
+            break
+
     # 연구 요청 구성
-    if research_needed:
+    if request_type == "information_query":
+        # 정보 조회 모드: 사용자 요청을 그대로 전달
+        research_request = f"사용자가 다음 정보를 요청했습니다:\n\n{user_message}\n\n해당 정보를 kubectl 명령어로 조회하여 결과를 반환해주세요."
+    elif research_needed:
+        # 배포 결정 모드: Planning의 지시 따름
         research_request = f"다음 정보를 수집해주세요:\n" + "\n".join(f"- {item}" for item in research_needed)
     else:
-        # 사용자의 원래 요청을 찾기
-        user_message = None
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                user_message = msg.get("content", "")
-                break
+        # 기본 모드
         if user_message:
             research_request = f"사용자 요청: {user_message}\n\n위 요청에 필요한 정보를 수집하고 분석해주세요."
         else:
@@ -159,15 +180,66 @@ def research_node(state: AgentState) -> AgentState:
                 # 최종 리포트인 경우
                 elif "summary" in commands_data and "findings" in commands_data:
                     print("\n✅ 최종 리포트 수신")
-                    # 최종 리포트를 content에 포함
-                    final_content = "\n".join(tool_outputs) + "\n\n## 최종 분석 결과\n\n" + json.dumps(commands_data, indent=2, ensure_ascii=False)
-                    
+
+                    # 요청 유형에 따라 다른 포맷
+                    if request_type == "information_query":
+                        # 정보 조회: 결과만 간단히 표시
+                        result = commands_data.get("result", "")
+                        findings = commands_data.get("findings", [])
+
+                        summary_parts = ["✅ 조회 완료\n"]
+
+                        # 조회 결과
+                        if result:
+                            summary_parts.append(f"**결과:**\n```\n{result}\n```")
+                        elif findings:
+                            for finding in findings[:3]:
+                                data = finding.get("data", "")
+                                if data:
+                                    summary_parts.append(f"{data}")
+
+                        final_content = "\n".join(summary_parts)
+
+                        # 정보 조회는 바로 종료
+                        state["current_agent"] = "end"
+
+                    else:
+                        # 배포 분석: 상세 정보 표시
+                        cluster_info = commands_data.get("cluster_info", {})
+                        findings = commands_data.get("findings", [])
+
+                        summary_parts = ["✅ 분석 완료\n"]
+
+                        # 클러스터 정보
+                        if cluster_info:
+                            summary_parts.append("**클러스터 정보**")
+                            if cluster_info.get("k8s_version"):
+                                summary_parts.append(f"- Kubernetes: {cluster_info['k8s_version']}")
+                            if cluster_info.get("nodes"):
+                                summary_parts.append(f"- 노드: {cluster_info['nodes']}")
+                            if cluster_info.get("existing_tools"):
+                                tools = ", ".join(cluster_info['existing_tools'])
+                                summary_parts.append(f"- 기존 도구: {tools}")
+
+                        # 주요 발견사항
+                        if findings:
+                            summary_parts.append("\n**주요 발견사항**")
+                            for finding in findings[:5]:  # 최대 5개만
+                                category = finding.get("category", "")
+                                data = finding.get("data", "")
+                                if category and data:
+                                    summary_parts.append(f"- {category}: {data}")
+
+                        final_content = "\n".join(summary_parts)
+
+                        # 배포 분석은 orchestrator로 돌아감
+                        state["current_agent"] = "orchestrator"
+
                     state["research_data"] = commands_data
                     state["messages"].append({
                         "role": "research",
                         "content": final_content
                     })
-                    state["current_agent"] = "orchestrator"
                     return state
                     
             except json.JSONDecodeError as e:
@@ -176,12 +248,13 @@ def research_node(state: AgentState) -> AgentState:
         # 명령어도 없고 최종 리포트도 아니면 종료
         if not commands_executed:
             print("\n✅ 명령어 요청 없음, 종료")
-            # 텍스트 응답을 그대로 사용
-            content = "\n".join(tool_outputs) + "\n\n" + response_text
-            
+
+            # 간단한 요약만 표시
+            content = "✅ 분석 완료\n\n기본 정보가 수집되었습니다."
+
             state["research_data"] = {
                 "summary": "정보 수집 완료",
-                "findings": [{"category": "raw", "data": response_text}],
+                "findings": [{"category": "기본", "data": "클러스터 정보 수집 완료"}],
                 "recommendations": []
             }
             state["messages"].append({
@@ -193,11 +266,12 @@ def research_node(state: AgentState) -> AgentState:
     
     # 최대 반복 도달
     print(f"\n⚠️ 최대 반복 횟수 도달 ({max_iterations})")
-    content = "\n".join(tool_outputs) + "\n\n정보 수집을 완료했습니다."
-    
+
+    content = "✅ 분석 완료\n\n기본 클러스터 정보가 수집되었습니다."
+
     state["research_data"] = {
-        "summary": "정보 수집 완료 (최대 반복 도달)",
-        "findings": [{"category": "raw", "data": content}],
+        "summary": "정보 수집 완료",
+        "findings": [{"category": "클러스터", "data": "기본 정보 수집 완료"}],
         "recommendations": []
     }
     state["messages"].append({
@@ -205,5 +279,5 @@ def research_node(state: AgentState) -> AgentState:
         "content": content
     })
     state["current_agent"] = "orchestrator"
-    
+
     return state

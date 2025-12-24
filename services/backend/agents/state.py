@@ -9,8 +9,10 @@ class AgentState(TypedDict):
     """에이전트 간 공유되는 상태"""
     messages: list                      # 대화 메시지 이력
     current_agent: str                  # 현재 활성 에이전트
+    request_type: Optional[str]         # 요청 유형: "information_query" or "deployment_decision"
     task_plan: Optional[dict]           # Planning Agent 출력 (폴더 구조, YAML 설계)
     research_data: Optional[dict]       # Research Agent 출력 (K8s 클러스터 상태)
-    implementation_prompt: Optional[str] # Prompt Generator 출력 (Markdown 프롬프트)
+    decision_report: Optional[dict]     # Decision Agent 출력 (추천/비추천 결정)
+    implementation_prompt: Optional[str] # Prompt Generator 출력 (구현 가이드)
     iteration_count: int                # 반복 횟수 (최대 2회)
     error: Optional[str]                # 에러 메시지
