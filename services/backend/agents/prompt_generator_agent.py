@@ -1,6 +1,6 @@
 """
 Prompt Generator Agent (Claude 4.5)
-다른 AI에게 전달할 구현 프롬프트를 Markdown으로 생성
+Decision Agent의 추천 결과를 바탕으로 다른 AI에게 전달할 구현 프롬프트 생성
 """
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -13,86 +13,156 @@ import json
 claude_prompt_gen = ChatAnthropic(
     model="claude-sonnet-4-20250514",
     api_key=os.getenv("ANTHROPIC_API_KEY"),
-    temperature=0.5
+    temperature=0.3
 )
 
 
-PROMPT_GENERATOR_SYSTEM = """You are the Decision & Recommendation Agent.
+PROMPT_GEN_SYSTEM = """You are the Implementation Prompt Generator.
 
 ## Role
-Analyze cluster state and provide user-friendly recommendations in Korean.
+Generate detailed implementation prompts for other AI assistants (Claude Code, ChatGPT, etc.).
 
 ## Input
-- Planning data: what would be needed if deploying
-- Research data: current cluster state, existing resources
+- Planning data: folder structure, required resources
+- Research data: cluster state, existing tools
+- Decision: deployment approved (추천)
 
-## Output Format (Korean Markdown)
-Create a user-friendly analysis report:
+## Output Format (Markdown)
+Create a comprehensive implementation guide that another AI can use:
 
 ```markdown
-# [도구명] 도입 분석 결과
+# [도구명] Kubernetes 배포 구현 가이드
 
-## 📊 현재 클러스터 상태
-- **Kubernetes 버전**: [version]
-- **노드 구성**: [nodes info]
-- **기존 도구**: [existing tools like ArgoCD, Gitea, etc.]
-- **운영 중인 애플리케이션**: [number and types]
-- **리소스 사용률**: [if available]
+## 📋 프로젝트 개요
+- **목표**: [도구] Kubernetes 클러스터에 배포
+- **환경**: Kubernetes v[version], [nodes] 노드
+- **사전 요구사항**: [prerequisites]
 
-## 💡 권장사항: [도입 추천 / 도입 비추천]
-
-### ✅ 도입을 추천하는 이유 (또는 ❌ 도입을 비추천하는 이유)
-1. [이유 1]
-2. [이유 2]
-3. [이유 3]
-
-### 🔄 대안 (도입 비추천인 경우)
-- [대안 1]: [설명]
-- [대안 2]: [설명]
-
-### 📌 도입 시 고려사항 (도입 추천인 경우)
-- **필요 리소스**: [CPU, Memory]
-- **예상 작업 시간**: [time estimate]
-- **복잡도**: [난이도]
-- **유지보수 부담**: [maintenance effort]
-
-## 🎯 결론
-[1-2문장으로 최종 권장사항 요약]
-
----
-
-## 📁 구현 가이드 (도입하기로 결정한 경우)
-
-### 폴더 구조
+## 📁 폴더 구조
+다음과 같은 디렉토리 구조를 생성하세요:
 \`\`\`
 deploy/[tool]/
 ├── base/
 │   ├── namespace.yaml
 │   ├── deployment.yaml
+│   ├── service.yaml
+│   ├── rbac.yaml
 │   └── kustomization.yaml
-└── overlays/prod/
-    └── kustomization.yaml
+└── overlays/
+    └── prod/
+        ├── resource-limits.yaml
+        └── kustomization.yaml
 \`\`\`
 
-### 주요 단계
-1. [Step 1 설명]
-2. [Step 2 설명]
-3. [Step 3 설명]
+## 🔧 구현 단계
 
-### 검증 방법
-\`\`\`bash
+### Step 1: Namespace 및 RBAC 생성
+**파일**: `deploy/[tool]/base/namespace.yaml`
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: [namespace]
+  labels:
+    app: [tool]
+```
+
+**파일**: `deploy/[tool]/base/rbac.yaml`
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: [tool]-sa
+  namespace: [namespace]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: [tool]-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["get", "list", "watch"]
+```
+
+### Step 2: Deployment 생성
+**파일**: `deploy/[tool]/base/deployment.yaml`
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: [tool]
+  namespace: [namespace]
+spec:
+  replicas: [replicas]
+  selector:
+    matchLabels:
+      app: [tool]
+  template:
+    metadata:
+      labels:
+        app: [tool]
+    spec:
+      serviceAccountName: [tool]-sa
+      containers:
+      - name: [tool]
+        image: [image]:[tag]
+        ports:
+        - containerPort: [port]
+        resources:
+          requests:
+            memory: "[memory]"
+            cpu: "[cpu]"
+          limits:
+            memory: "[memory_limit]"
+            cpu: "[cpu_limit]"
+```
+
+### Step 3: Service 및 Ingress 생성
+[... 계속 작성]
+
+### Step 4: Kustomize 설정
+[... 계속 작성]
+
+## ✅ 검증 및 배포
+
+### 배포 명령어
+```bash
+# Dry-run으로 검증
+kubectl apply -k deploy/[tool]/overlays/prod --dry-run=client
+
+# 실제 배포
+kubectl apply -k deploy/[tool]/overlays/prod
+
+# 상태 확인
 kubectl get pods -n [namespace]
 kubectl get svc -n [namespace]
-\`\`\`
+kubectl logs -f deployment/[tool] -n [namespace]
+```
+
+### 검증 체크리스트
+- [ ] Pod가 Running 상태인지 확인
+- [ ] Service가 올바른 포트로 노출되는지 확인
+- [ ] Ingress가 정상 작동하는지 확인
+- [ ] 로그에 에러가 없는지 확인
+
+## 📌 주요 고려사항
+- **리소스 제한**: [cluster 상황에 맞춘 권장사항]
+- **보안**: [RBAC, NetworkPolicy 등]
+- **모니터링**: [ServiceMonitor, 로그 수집 등]
+- **백업**: [설정 백업 방법]
+
+## 🔗 참고 자료
+- [도구] 공식 문서: [URL]
+- Kubernetes 배포 가이드: [URL]
 ```
 
 ## Guidelines
-1. **한국어로 작성** (모든 내용)
-2. **명확한 결론** 제시 (추천/비추천)
-3. **구체적인 이유** 제공
-4. **YAML 코드 제외** (폴더 구조만 간단히)
-5. **사용자 친화적** (기술 용어 최소화)
-6. 이모지 사용으로 가독성 향상
+1. **실행 가능한 YAML 예시** 포함
+2. **단계별 구현 가이드** 제공
+3. **검증 명령어** 포함
+4. **클러스터 상황에 맞춘 권장사항** (Research 데이터 활용)
+5. 다른 AI가 바로 실행할 수 있도록 구체적으로 작성
 """
 
 
@@ -103,48 +173,52 @@ def prompt_generator_node(state: AgentState) -> AgentState:
     messages = state["messages"]
     task_plan = state.get("task_plan", {})
     research_data = state.get("research_data", {})
+    decision_report = state.get("decision_report", {})
 
     # 입력 데이터 준비
-    plan_summary = json.dumps(task_plan, indent=2, ensure_ascii=False) if task_plan else "No plan available"
-    research_summary = json.dumps(research_data, indent=2, ensure_ascii=False) if research_data else "No research data"
+    plan_summary = json.dumps(task_plan, indent=2, ensure_ascii=False) if task_plan else "No plan"
+    research_summary = json.dumps(research_data, indent=2, ensure_ascii=False) if research_data else "No research"
 
     # 사용자 원래 요청
     user_request = messages[0]["content"] if messages else "Deploy infrastructure"
+    tool_name = task_plan.get("target_tool", "Unknown") if task_plan else "Unknown"
 
     print(f"\n{'='*80}")
-    print(f"Prompt Generator Agent - Generating implementation prompt")
+    print(f"Prompt Generator - Creating implementation guide")
     print(f"{'='*80}")
 
     # Claude 호출
     response = claude_prompt_gen.invoke([
-        SystemMessage(content=PROMPT_GENERATOR_SYSTEM),
-        HumanMessage(content=f"""사용자 요청에 대한 분석 결과를 한국어로 작성해주세요:
+        SystemMessage(content=PROMPT_GEN_SYSTEM),
+        HumanMessage(content=f"""다른 AI에게 전달할 구현 가이드를 생성해주세요:
 
 **사용자 요청:** {user_request}
+**배포 대상:** {tool_name}
 
 **계획 데이터:**
 ```json
 {plan_summary}
 ```
 
-**클러스터 분석 결과:**
+**클러스터 상태:**
 ```json
 {research_summary}
 ```
 
 위 정보를 바탕으로:
-1. 현재 클러스터 상태 요약
-2. 도입 추천/비추천 결정 (명확한 이유와 함께)
-3. 대안 제시 (비추천인 경우) 또는 구현 가이드 (추천인 경우)
-4. 최종 결론
+1. 실행 가능한 YAML 파일 예시 작성
+2. 단계별 구현 가이드 제공
+3. 클러스터 상황에 맞춘 리소스 설정 권장
+4. 배포 및 검증 명령어 포함
+5. 다른 AI가 바로 실행할 수 있도록 구체적으로 작성
 
-**중요**: 한국어로 작성하고, YAML 코드는 제외하고, 사용자 친화적으로 작성해주세요.
+**중요**: Markdown 형식으로 작성하고, 실제로 동작하는 YAML 코드를 포함해주세요.
 """)
     ])
 
     content = response.content
 
-    print(f"✅ Prompt generated ({len(content)} characters)")
+    print(f"✅ Implementation guide generated ({len(content)} characters)")
 
     # 상태 업데이트
     state["implementation_prompt"] = content

@@ -88,21 +88,65 @@ def planning_node(state: AgentState) -> AgentState:
             json_str = content
 
         task_plan = json.loads(json_str)
+
+        # 사용자 친화적인 한국어 요약 생성
+        summary_parts = []
+
+        target_tool = task_plan.get("target_tool", "알 수 없음")
+        summary_parts.append(f"📋 **{target_tool}** 요구사항 분석 완료\n")
+
+        # 필요 조건
+        requirements = task_plan.get("requirements", {})
+        if requirements:
+            summary_parts.append("**필요 조건**")
+            if requirements.get("min_k8s_version"):
+                summary_parts.append(f"- Kubernetes 버전: 최소 {requirements['min_k8s_version']} 이상")
+
+            resources = requirements.get("estimated_resources", {})
+            if resources:
+                cpu = resources.get("cpu", "")
+                memory = resources.get("memory", "")
+                storage = resources.get("storage", "")
+                resource_str = []
+                if cpu:
+                    resource_str.append(f"CPU {cpu}코어")
+                if memory:
+                    resource_str.append(f"메모리 {memory}")
+                if storage:
+                    resource_str.append(f"스토리지 {storage}")
+                if resource_str:
+                    summary_parts.append(f"- 예상 리소스: {', '.join(resource_str)}")
+
+            dependencies = requirements.get("dependencies", [])
+            if dependencies:
+                deps_str = ", ".join(dependencies)
+                summary_parts.append(f"- 의존성: {deps_str}")
+
+        # 확인이 필요한 사항
+        research_needed = task_plan.get("research_needed", [])
+        if research_needed:
+            summary_parts.append("\n**확인이 필요한 사항**")
+            for item in research_needed[:5]:  # 최대 5개
+                # 영어를 한국어로 간단히 변환
+                item_ko = item.replace("Check", "확인:").replace("Verify", "검증:").replace("Analyze", "분석:")
+                summary_parts.append(f"- {item_ko}")
+
+        user_friendly_content = "\n".join(summary_parts)
+
     except Exception as e:
         task_plan = {
             "task_type": "mixed",
-            "summary": "계획 파싱 실패, Research Agent로 이동",
-            "steps": [{"step": 1, "description": "정보 수집", "agent": "research"}],
-            "research_needed": ["사용자 요청 관련 정보"],
-            "success_criteria": ["작업 완료"],
+            "summary": "계획 파싱 실패",
+            "research_needed": ["클러스터 상태 확인"],
             "error": str(e)
         }
+        user_friendly_content = "📋 요구사항 분석 중...\n\n기본 정보를 확인하겠습니다."
 
     # 상태 업데이트
     state["task_plan"] = task_plan
     state["messages"].append({
         "role": "planning",
-        "content": content
+        "content": user_friendly_content
     })
     state["current_agent"] = "orchestrator"  # 다시 orchestrator로 반환
 

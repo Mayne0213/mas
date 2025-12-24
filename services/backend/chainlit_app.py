@@ -56,8 +56,10 @@ async def main(message: cl.Message):
         initial_state: AgentState = {
             "messages": [{"role": "user", "content": message.content}],
             "current_agent": "orchestrator",
+            "request_type": None,  # Orchestrator가 결정
             "task_plan": None,
             "research_data": None,
+            "decision_report": None,
             "implementation_prompt": None,
             "iteration_count": 0,
             "error": None
@@ -80,20 +82,22 @@ async def main(message: cl.Message):
                     agent_content = last_message["content"]
 
                     # 사용자에게 보여줄 에이전트만 필터링
-                    user_facing_agents = ["planning", "research", "prompt_generator"]
+                    user_facing_agents = ["planning", "research", "decision", "prompt_generator"]
 
                     if agent_name in user_facing_agents:
                         # 에이전트별 아이콘
                         agent_icons = {
                             "planning": "📋",
                             "research": "🔍",
+                            "decision": "💡",
                             "prompt_generator": "📝"
                         }
 
                         agent_display_names = {
                             "planning": "도구 요구사항 분석",
                             "research": "클러스터 상태 분석",
-                            "prompt_generator": "의사결정 보고서 생성"
+                            "decision": "의사결정 분석",
+                            "prompt_generator": "구현 가이드 생성"
                         }
 
                         icon = agent_icons.get(agent_name, "🤖")
@@ -118,7 +122,8 @@ async def main(message: cl.Message):
                         status_icons = {
                             "planning": "📋 도구 요구사항 분석 중...",
                             "research": "🔍 클러스터 상태 분석 중...",
-                            "prompt_generator": "💡 의사결정 보고서 생성 중...",
+                            "decision": "💡 의사결정 분석 중...",
+                            "prompt_generator": "📝 구현 가이드 생성 중...",
                             "end": "✨ 분석 완료!"
                         }
                         status_text = status_icons.get(current_agent, "⏳ 작업 중...")
@@ -153,7 +158,8 @@ def rename(orig_author: str):
         "orchestrator": "조율자 (Claude 4.5)",
         "planning": "요구사항 분석 (Claude 4.5)",
         "research": "클러스터 분석 (Groq)",
-        "prompt_generator": "의사결정 (Claude 4.5)"
+        "decision": "의사결정 (Claude 4.5)",
+        "prompt_generator": "구현 가이드 (Claude 4.5)"
     }
     return rename_dict.get(orig_author, orig_author)
 
