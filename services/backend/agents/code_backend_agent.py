@@ -50,11 +50,16 @@ BACKEND_PROMPT = """당신은 Multi-Agent System의 **Backend Code Agent**입니
    - 캐싱 활용 (Redis)
    - 비동기 처리
 
-## execute_bash 활용 예시:
-- 파일 생성: execute_bash("cat > /app/repos/project/api/users.py << 'EOF'\\n코드내용\\nEOF")
-- Git 커밋: execute_bash("cd /app/repos/project && git add . && git commit -m 'Add user API'")
-- 테스트 실행: execute_bash("cd /app/repos/project && pytest tests/")
-- DB 마이그레이션: execute_bash("cd /app/repos/project && alembic upgrade head")
+## 도구 사용 가이드:
+
+### execute_ssh (호스트 작업용) ⭐ 주로 사용:
+- 파일 생성: execute_ssh("cat > /home/ubuntu/Projects/myproject/api/users.py << 'EOF'\\n코드내용\\nEOF")
+- Git 커밋: execute_ssh("cd /home/ubuntu/Projects/myproject && git add . && git commit -m 'Add user API'")
+- 테스트 실행: execute_ssh("cd /home/ubuntu/Projects/myproject && pytest tests/")
+- DB 마이그레이션: execute_ssh("cd /home/ubuntu/Projects/myproject && alembic upgrade head")
+
+### execute_bash (컨테이너 내부용):
+- 간단한 검증이나 테스트에만 사용
 
 ## 출력 형식
 생성한 파일 목록과 간단한 설명을 제공하세요.

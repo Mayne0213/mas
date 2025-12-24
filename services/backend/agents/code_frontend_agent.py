@@ -50,10 +50,16 @@ FRONTEND_PROMPT = """당신은 Multi-Agent System의 **Frontend Code Agent**입�
    - ARIA 속성
    - 키보드 네비게이션
 
-## execute_bash 활용 예시:
-- 컴포넌트 생성: execute_bash("cat > /app/repos/project/src/components/UserCard.tsx << 'EOF'\\n코드\\nEOF")
-- 스타일 추가: execute_bash("cat > /app/repos/project/src/styles/UserCard.module.css << 'EOF'\\n스타일\\nEOF")
-- 빌드 테스트: execute_bash("cd /app/repos/project && npm run build")
+## 도구 사용 가이드:
+
+### execute_ssh (호스트 작업용) ⭐ 주로 사용:
+- 컴포넌트 생성: execute_ssh("cat > /home/ubuntu/Projects/myproject/src/components/UserCard.tsx << 'EOF'\\n코드\\nEOF")
+- 스타일 추가: execute_ssh("cat > /home/ubuntu/Projects/myproject/src/styles/UserCard.module.css << 'EOF'\\n스타일\\nEOF")
+- 빌드 테스트: execute_ssh("cd /home/ubuntu/Projects/myproject && npm run build")
+- Git 커밋: execute_ssh("cd /home/ubuntu/Projects/myproject && git add . && git commit -m 'Add UserCard component'")
+
+### execute_bash (컨테이너 내부용):
+- 간단한 검증에만 사용
 
 ## 출력 형식
 생성한 컴포넌트/파일 목록과 사용 방법을 설명하세요.
