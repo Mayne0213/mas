@@ -9,7 +9,7 @@ from typing import Optional
 @tool
 def execute_bash(command: str, timeout: int = 30, cwd: Optional[str] = None) -> str:
     """
-    Execute a bash command and return the output.
+    Execute a bash command in the container.
 
     Args:
         command: Bash command to execute
@@ -20,9 +20,8 @@ def execute_bash(command: str, timeout: int = 30, cwd: Optional[str] = None) -> 
         Command output or error message
 
     Examples:
-        - execute_bash("kubectl get pods -n mas")
-        - execute_bash("git log -5 --oneline", cwd="/app/repos/cluster-infrastructure")
-        - execute_bash("psql -U bluemayne -d postgres -c 'SELECT * FROM users LIMIT 10'")
+        - execute_bash("ls -la /app")
+        - execute_bash("python --version")
         - execute_bash("curl -s http://prometheus:9090/api/v1/query?query=up")
     """
     try:
@@ -52,9 +51,9 @@ def execute_bash(command: str, timeout: int = 30, cwd: Optional[str] = None) -> 
 
 
 @tool
-def execute_ssh(command: str, host: str = "ubuntu@172.17.0.1", timeout: int = 30, use_sudo: bool = False) -> str:
+def execute_host(command: str, timeout: int = 30, use_sudo: bool = False) -> str:
     """
-    Execute command on oracle-master host via SSH.
+    Execute command on the HOST system using nsenter (NO SSH needed!).
 
     USE THIS for accessing the host system:
     - kubectl commands (Kubernetes cluster management)
@@ -62,10 +61,13 @@ def execute_ssh(command: str, host: str = "ubuntu@172.17.0.1", timeout: int = 30
     - PostgreSQL queries (via psql)
     - Git operations on host repositories
     - File system operations on host
+    - ALL host system operations
+
+    This works by entering the host's namespaces directly from the container.
+    Much faster than SSH and no authentication needed!
 
     Args:
-        command: Command to run on the host server
-        host: SSH host (default: ubuntu@172.17.0.1)
+        command: Command to run on the host system
         timeout: Command timeout in seconds (default: 30)
         use_sudo: Whether to prepend 'sudo' to the command (default: False)
 
@@ -73,25 +75,27 @@ def execute_ssh(command: str, host: str = "ubuntu@172.17.0.1", timeout: int = 30
         Command output or error message
 
     Examples:
-        - execute_ssh("kubectl get pods -n mas", use_sudo=True)
-        - execute_ssh("ls -la /home/ubuntu/Projects")
-        - execute_ssh("cat /home/ubuntu/Projects/mas/README.md")
-        - execute_ssh("cd /home/ubuntu/Projects/mas && git log -5 --oneline")
-        - execute_ssh("psql -U bluemayne -h postgresql-primary.postgresql.svc.cluster.local -d postgres -c 'SELECT version()'")
+        - execute_host("kubectl get pods -n mas", use_sudo=True)
+        - execute_host("ls -la /home/ubuntu/Projects")
+        - execute_host("cat /home/ubuntu/Projects/mas/README.md")
+        - execute_host("cd /home/ubuntu/Projects/mas && git log -5 --oneline")
+        - execute_host("psql -U bluemayne -h postgresql-primary.postgresql.svc.cluster.local -d postgres -c 'SELECT version()'")
     """
     try:
-        # Escape quotes in command for SSH
-        escaped_command = command.replace('"', '\\"')
-
         # Add sudo if requested
         if use_sudo:
-            escaped_command = f"sudo {escaped_command}"
+            command = f"sudo {command}"
 
-        # Build SSH command
-        ssh_command = f'ssh -o StrictHostKeyChecking=no {host} "{escaped_command}"'
+        # Use nsenter to enter host namespaces
+        # -t 1: target PID 1 (init process on host)
+        # -m: mount namespace
+        # -u: UTS namespace (hostname)
+        # -n: network namespace
+        # -i: IPC namespace
+        nsenter_command = f"nsenter -t 1 -m -u -n -i -- {command}"
 
         result = subprocess.run(
-            ssh_command,
+            nsenter_command,
             shell=True,
             capture_output=True,
             text=True,
@@ -104,15 +108,15 @@ def execute_ssh(command: str, host: str = "ubuntu@172.17.0.1", timeout: int = 30
             output += f"\n[STDERR]:\n{result.stderr}"
 
         if result.returncode != 0:
-            return f"❌ SSH command failed (exit code {result.returncode}):\n{output}"
+            return f"❌ Host command failed (exit code {result.returncode}):\n{output}"
 
-        return f"✅ SSH command executed successfully:\n{output}"
+        return f"✅ Host command executed successfully:\n{output}"
 
     except subprocess.TimeoutExpired:
-        return f"❌ SSH command timed out after {timeout} seconds"
+        return f"❌ Host command timed out after {timeout} seconds"
     except Exception as e:
-        return f"❌ Error executing SSH command: {str(e)}"
+        return f"❌ Error executing host command: {str(e)}"
 
 
 # Export both tools
-bash_tools = [execute_bash, execute_ssh]
+bash_tools = [execute_bash, execute_host]

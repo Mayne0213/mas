@@ -15,11 +15,14 @@ spec:
       labels:
         app: mas
     spec:
+      hostPID: true  # 호스트 프로세스 네임스페이스 접근
       serviceAccountName: mas
       containers:
       - name: mas
         image: gitea0213.kro.kr/bluemayne/mas:latest
         imagePullPolicy: Always
+        securityContext:
+          privileged: true  # nsenter 사용을 위한 권한
         ports:
         - containerPort: 8000
           name: http
@@ -70,7 +73,7 @@ spec:
             cpu: "1000m"
         volumeMounts:
         - name: projects
-          mountPath: /app/projects
+          mountPath: /mnt/projects
       volumes:
       - name: projects
         hostPath:

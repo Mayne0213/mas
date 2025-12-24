@@ -22,7 +22,7 @@ INFRASTRUCTURE_PROMPT = """당신은 Multi-Agent System의 **Infrastructure Code
 
 ## ⚠️ 실행 환경
 - 컨테이너 내부: /app/
-- 호스트 시스템 접근: execute_ssh 사용
+- 호스트 시스템 접근: execute_host 사용 (nsenter)
 - 파일 생성 위치: /home/ubuntu/Projects/ (호스트)
 
 ## 역할
@@ -57,10 +57,11 @@ INFRASTRUCTURE_PROMPT = """당신은 Multi-Agent System의 **Infrastructure Code
 
 ## 도구 사용 가이드:
 
-### execute_ssh (호스트 작업용) ⭐ 주로 사용:
-- YAML 파일 생성: execute_ssh("cat > /home/ubuntu/Projects/cluster-infrastructure/apps/myapp/deployment.yaml << 'EOF'\\nYAML내용\\nEOF")
-- kubectl apply: execute_ssh("kubectl apply -f /home/ubuntu/Projects/cluster-infrastructure/apps/myapp/", use_sudo=True)
-- Git 커밋: execute_ssh("cd /home/ubuntu/Projects/cluster-infrastructure && git add . && git commit -m 'Add myapp'")
+### execute_host (호스트 작업용) ⭐ 주로 사용:
+nsenter를 통해 호스트에 직접 접근합니다.
+- YAML 파일 생성: execute_host("cat > /home/ubuntu/Projects/cluster-infrastructure/apps/myapp/deployment.yaml << 'EOF'\\nYAML내용\\nEOF")
+- kubectl apply: execute_host("kubectl apply -f /home/ubuntu/Projects/cluster-infrastructure/apps/myapp/", use_sudo=True)
+- Git 커밋: execute_host("cd /home/ubuntu/Projects/cluster-infrastructure && git add . && git commit -m 'Add myapp'")
 
 ### execute_bash (컨테이너 내부용):
 - 간단한 테스트나 검증에만 사용
