@@ -1,5 +1,5 @@
 """
-Research Agent (Groq)
+Research Agent (Claude)
 정보 수집 및 문서/코드베이스 검색
 JSON 기반 명령어 생성 방식으로 재작성
 """
@@ -12,7 +12,7 @@ import re
 
 
 # Claude 4.5 모델 초기화
-claude_prompt_gen = ChatAnthropic(
+claude_research = ChatAnthropic(
     model="claude-sonnet-4-20250514",
     api_key=os.getenv("ANTHROPIC_API_KEY"),
     temperature=0.3
@@ -114,8 +114,8 @@ def research_node(state: AgentState) -> AgentState:
         print(f"Research Agent - Iteration {iteration}/{max_iterations}")
         print(f"{'='*80}")
         
-        # Groq 호출
-        response = groq_research.invoke(conversation)
+        # Claude 호출
+        response = claude_research.invoke(conversation)
         response_text = response.content
         
         print(f"Response: {response_text[:500]}...")
