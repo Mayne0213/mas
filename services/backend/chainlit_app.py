@@ -2,7 +2,8 @@
 Chainlit UI for MAS Platform
 """
 import chainlit as cl
-from agents import mas_graph, AgentState
+from workflow import mas_graph
+from agents import AgentState
 import os
 from dotenv import load_dotenv
 
@@ -13,13 +14,19 @@ load_dotenv()
 async def start():
     """채팅 시작 시"""
     await cl.Message(
-        content="🤖 **Multi-Agent System**에 오신 것을 환영합니다!\n\n"
+        content="🤖 **Multi-Agent System v2.0**에 오신 것을 환영합니다!\n\n"
                 "저는 다음 전문가 팀과 함께 작업합니다:\n\n"
-                "- 🎼 **Claude Code**: 총괄 조율자 & DevOps 전문가\n"
-                "- ⚙️ **Groq Backend**: 백엔드 개발자\n"
-                "- 🎨 **Groq Frontend**: 프론트엔드 개발자\n"
-                "- 📊 **Groq SRE**: 모니터링 & 성능 전문가\n"
-                "- 📝 **Groq YAML Manager**: Kubernetes YAML 파일 관리\n\n"
+                "**계획 & 조율**\n"
+                "- 🎼 **Orchestrator** (Claude 4.5): 전체 워크플로우 조율\n"
+                "- 📋 **Planning Agent** (Claude 4.5): 작업 계획 수립\n\n"
+                "**정보 수집**\n"
+                "- 🔍 **Research Agent** (Groq): 정보 수집 및 분석\n\n"
+                "**코드 작성**\n"
+                "- ⚙️ **Backend Agent** (Groq): 백엔드 개발\n"
+                "- 🎨 **Frontend Agent** (Groq): 프론트엔드 개발\n"
+                "- 🏗️ **Infrastructure Agent** (Groq): K8s/DevOps\n\n"
+                "**품질 보증**\n"
+                "- ✅ **Review Agent** (Claude): 코드 리뷰 & 테스트\n\n"
                 "무엇을 도와드릴까요?"
     ).send()
 
@@ -32,8 +39,13 @@ async def main(message: cl.Message):
     initial_state: AgentState = {
         "messages": [{"role": "user", "content": message.content}],
         "current_agent": "orchestrator",
-        "task_type": "",
-        "result": {}
+        "task_plan": None,
+        "research_data": None,
+        "code_outputs": {},
+        "review_feedback": None,
+        "iteration_count": 0,
+        "is_approved": False,
+        "error": None
     }
     
     # 응답 메시지 생성
@@ -51,12 +63,14 @@ async def main(message: cl.Message):
                 # 에이전트별 아이콘
                 agent_icons = {
                     "orchestrator": "🎼",
+                    "planning": "📋",
+                    "research": "🔍",
                     "backend_developer": "⚙️",
                     "frontend_developer": "🎨",
-                    "sre_specialist": "📊",
-                    "yaml_manager": "📝"
+                    "infrastructure_engineer": "🏗️",
+                    "review": "✅"
                 }
-                
+
                 icon = agent_icons.get(agent_name, "🤖")
                 
                 # 스트리밍 업데이트
@@ -78,11 +92,13 @@ async def setup_agent(settings):
 def rename(orig_author: str):
     """에이전트 이름 매핑"""
     rename_dict = {
-        "orchestrator": "Claude Code (Orchestrator)",
-        "backend_developer": "Groq Backend Dev",
-        "frontend_developer": "Groq Frontend Dev",
-        "sre_specialist": "Groq SRE",
-        "yaml_manager": "Groq YAML Manager"
+        "orchestrator": "Orchestrator (Claude 4.5)",
+        "planning": "Planning Agent (Claude 4.5)",
+        "research": "Research Agent (Groq)",
+        "backend_developer": "Backend Agent (Groq)",
+        "frontend_developer": "Frontend Agent (Groq)",
+        "infrastructure_engineer": "Infrastructure Agent (Groq)",
+        "review": "Review Agent (Claude)"
     }
     return rename_dict.get(orig_author, orig_author)
 
