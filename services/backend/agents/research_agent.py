@@ -3,7 +3,7 @@ Research Agent (Groq)
 정보 수집 및 문서/코드베이스 검색
 JSON 기반 명령어 생성 방식으로 재작성
 """
-from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
 from .state import AgentState
 import os
