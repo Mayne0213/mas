@@ -1,32 +1,33 @@
 # MAS (Multi-Agent System)
 
-**K8s Infrastructure Planning System** - AI agents that analyze your Kubernetes cluster and generate implementation plans.
+**K8s 인프라 분석 & 의사결정 시스템** - 클러스터를 분석하고 도구 도입 여부를 결정해주는 AI 시스템
 
 ## 🎯 What is this?
 
-MAS는 Kubernetes 클러스터 상태를 분석하고, 인프라 배포 계획을 수립하는 AI 에이전트 시스템입니다.
+MAS는 Kubernetes 클러스터 상태를 분석하고, **도구 도입 추천/비추천을 결정**해주는 AI 에이전트 시스템입니다.
 
 **사용 시나리오:**
-1. "Tekton을 도입하고 싶어" → 클러스터 분석 → YAML 구조 설계 → 구현 가이드 생성
-2. 생성된 Markdown 프롬프트를 복사해서 다른 AI (Claude Code, ChatGPT 등)에 붙여넣기
-3. 실제 코드 구현은 다른 AI가 담당
+1. "Tekton 도입 여부를 결정해줘" → 클러스터 분석 → **도입 추천/비추천 결정**
+2. 한국어로 이유, 대안, 구현 가이드 제공
+3. 기술적 세부사항 없이 **명확한 결론** 제시
 
 ## 🤖 Agents
 
 ### Planning Agent (Claude 4.5)
-- 폴더 구조 설계 (deploy/tool/base, overlays/prod, etc.)
-- YAML 파일 조직화
-- K8s 리소스 계획 (Namespace, Deployment, Service, etc.)
+- 도구 요구사항 분석
+- 필요한 K8s 리소스 파악
+- 확인이 필요한 클러스터 정보 정의
 
 ### Research Agent (Groq Llama 3.3)
 - kubectl 명령어로 클러스터 상태 분석
-- 기존 리소스 확인 (namespaces, storage classes, quotas)
-- 호환성 검토
+- 기존 도구 확인 (ArgoCD, Gitea, Prometheus 등)
+- 리소스 사용률 및 버전 확인
 
-### Prompt Generator (Claude 4.5)
-- Markdown 형식의 구현 가이드 생성
-- YAML 예시 포함
-- 검증 명령어 제공
+### Decision Agent (Claude 4.5)
+- **도입 추천/비추천 결정** (한국어)
+- 명확한 이유 제시
+- 대안 제시 (비추천인 경우)
+- 간단한 구현 가이드 (추천인 경우)
 
 ### Tech stack
 - **Backend**: LangGraph + LangChain + FastAPI
@@ -213,53 +214,64 @@ Examples:
 
 ## 📝 Usage examples
 
-### Example 1: Deploy Tekton
+### Example 1: Tekton 도입 여부 결정
 
 ```text
-User: "Tekton을 도입하고 싶어"
+User: "Tekton 도입 여부를 결정해줘"
 
-🎼 Orchestrator:
-  → routes to Planning Agent
+🎼 Orchestrator → 조율
 
 📋 Planning Agent:
-  → designs folder structure: deploy/tekton/{base,overlays/prod}
-  → plans K8s resources: Namespace, RBAC, Deployments, Services
-  → identifies research needs
+  → Tekton 요구사항: Namespace, CRDs, Controllers
+  → 필요 리소스: 2 CPU, 4GB RAM
+  → 확인 필요: 기존 CI/CD 도구, K8s 버전
 
 🔍 Research Agent:
-  → runs: kubectl get namespaces, kubectl get storageclasses
-  → checks: existing tekton resources, cluster version
-  → analyzes: available resources and quotas
+  → kubectl get nodes: v1.33.6, 3 nodes ✓
+  → kubectl get pods -A: ArgoCD 운영 중 발견
+  → Gitea Actions 사용 가능 확인
 
-📝 Prompt Generator:
-  → generates comprehensive Markdown implementation guide
-  → includes: YAML examples, folder structure, validation commands
+💡 Decision Agent:
+  ❌ Tekton 도입 비추천
 
-✨ Output: Markdown prompt ready to copy-paste into Claude Code/ChatGPT
+  이유:
+  - ArgoCD + Gitea Actions로 충분
+  - 추가 리소스 소비 불필요
+  - 학습 곡선 및 유지보수 부담
+
+  대안:
+  - Gitea Actions 활용 (이미 설치됨)
+  - ArgoCD로 배포 자동화 유지
+
+✨ Output: 명확한 한국어 보고서
 ```
 
-### Example 2: Deploy Harbor Registry
+### Example 2: Harbor 필요성 분석
 
 ```text
-User: "Harbor를 배포하려고 해"
+User: "Harbor가 필요한지 분석해줘"
 
-→ Planning: folder structure + YAML organization
-→ Research: storage classes, ingress controllers, TLS setup
-→ Prompt Gen: Markdown guide with Harbor Helm values, ingress config, etc.
+→ Planning: Harbor 요구사항 분석
+→ Research: 기존 registry 확인 (Gitea Container Registry 발견)
+→ Decision:
+  ❌ Harbor 도입 비추천
+  이유: Gitea Container Registry로 충분
 
-✨ Copy the prompt → Paste into another AI → Get actual implementation
+✨ 사용자 친화적 한국어 결론
 ```
 
-### Example 3: Deploy Prometheus
+### Example 3: Prometheus 설치 여부
 
 ```text
-User: "Prometheus를 설치하고 싶어"
+User: "Prometheus를 설치해야 할까?"
 
-→ Planning: monitoring stack structure (Prometheus, Grafana, AlertManager)
-→ Research: existing ServiceMonitors, PVC requirements
-→ Prompt Gen: Complete implementation guide
+→ Planning: Monitoring stack 요구사항
+→ Research: 이미 Prometheus 운영 중 발견!
+→ Decision:
+  ✅ 이미 설치되어 있음
+  현재 상태: monitoring namespace에서 정상 작동 중
 
-✨ Result: Ready-to-use prompt for code generation
+✨ 중복 설치 방지
 ```
 
 ---
@@ -267,19 +279,44 @@ User: "Prometheus를 설치하고 싶어"
 ## 🔧 Workflow
 
 ```
-User Input: "Deploy X"
+User Input: "X 도입 여부를 결정해줘"
      ↓
 Orchestrator (조율)
      ↓
-Planning Agent (구조 설계)
+Planning Agent (도구 요구사항 분석)
      ↓
-Research Agent (클러스터 분석)
+Research Agent (클러스터 상태 분석)
      ↓
-Prompt Generator (가이드 생성)
+Decision Agent (한국어 의사결정 보고서)
      ↓
-Output: Markdown Implementation Guide
-     ↓
-User copies → Pastes to Claude Code/ChatGPT → Gets actual code
+Output: ✅ 추천 또는 ❌ 비추천 (이유 포함)
+```
+
+## 📊 출력 예시
+
+```markdown
+# Tekton 도입 분석 결과
+
+## 📊 현재 클러스터 상태
+- Kubernetes 버전: v1.33.6
+- 노드: 3개 (1 control-plane, 2 workers)
+- 기존 CI/CD: ArgoCD, Gitea Actions
+- 운영 애플리케이션: 15개
+
+## 💡 권장사항: Tekton 도입 비추천
+
+### ❌ 비추천 이유
+1. ArgoCD + Gitea Actions 조합으로 충분
+2. 추가 리소스 소비 (2 CPU, 4GB RAM)
+3. 학습 곡선 및 운영 부담 증가
+
+### 🔄 권장 대안
+- Gitea Actions로 빌드 파이프라인 구성
+- ArgoCD로 GitOps 배포 유지
+- 필요시 GitHub Actions 연동
+
+## 🎯 결론
+현재 인프라로 충분하며, Tekton 도입은 불필요합니다.
 ```
 
 ## 🤝 Contributing

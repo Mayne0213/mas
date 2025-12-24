@@ -22,20 +22,21 @@ except:
 async def start():
     """채팅 시작 시"""
     await cl.Message(
-        content="☸️ **K8s Infrastructure Planning System v3.0**에 오신 것을 환영합니다!\n\n"
-                "당신의 Kubernetes 클러스터 상태를 분석하고 인프라 배포 계획을 수립해드립니다.\n\n"
-                "**에이전트 팀**\n"
-                "- 🎼 **Orchestrator** (Claude 4.5): 전체 워크플로우 조율\n"
-                "- 📋 **Planning Agent** (Claude 4.5): 폴더 구조 & YAML 설계\n"
-                "- 🔍 **Research Agent** (Groq): K8s 클러스터 상태 분석\n"
-                "- 📝 **Prompt Generator** (Claude 4.5): 구현 가이드 생성\n\n"
+        content="☸️ **K8s 인프라 분석 & 의사결정 시스템**에 오신 것을 환영합니다!\n\n"
+                "클러스터를 분석하고, 도구 도입 여부를 결정해드립니다.\n\n"
+                "**어떻게 작동하나요?**\n"
+                "1. 📋 도구 분석 → 2. 🔍 클러스터 상태 확인 → 3. 💡 추천/비추천 결정\n\n"
                 "**사용 예시**\n"
                 "```\n"
-                "Tekton을 도입하고 싶어\n"
-                "Harbor를 배포하려고 해\n"
-                "Prometheus를 설치하고 싶어\n"
+                "Tekton 도입 여부를 결정해줘\n"
+                "Harbor가 필요한지 분석해줘\n"
+                "Prometheus를 설치해야 할까?\n"
                 "```\n\n"
-                "배포하고 싶은 도구를 알려주세요!"
+                "**결과물**\n"
+                "✅ 도입 추천 또는 ❌ 도입 비추천 (이유 포함)\n"
+                "🔄 대안 제시\n"
+                "📌 구현 가이드 (도입하는 경우)\n\n"
+                "궁금한 도구를 알려주세요!"
     ).send()
 
 
@@ -90,9 +91,9 @@ async def main(message: cl.Message):
                         }
 
                         agent_display_names = {
-                            "planning": "인프라 계획 수립",
+                            "planning": "도구 요구사항 분석",
                             "research": "클러스터 상태 분석",
-                            "prompt_generator": "구현 가이드 생성"
+                            "prompt_generator": "의사결정 보고서 생성"
                         }
 
                         icon = agent_icons.get(agent_name, "🤖")
@@ -115,10 +116,10 @@ async def main(message: cl.Message):
                         # Orchestrator는 간단한 상태 메시지만 표시
                         current_agent = state.get("current_agent", "")
                         status_icons = {
-                            "planning": "📋 인프라 계획 수립 중...",
+                            "planning": "📋 도구 요구사항 분석 중...",
                             "research": "🔍 클러스터 상태 분석 중...",
-                            "prompt_generator": "📝 구현 가이드 생성 중...",
-                            "end": "✨ 완료! 아래 프롬프트를 복사하여 사용하세요."
+                            "prompt_generator": "💡 의사결정 보고서 생성 중...",
+                            "end": "✨ 분석 완료!"
                         }
                         status_text = status_icons.get(current_agent, "⏳ 작업 중...")
                         status_msg.content = status_text
@@ -149,10 +150,10 @@ async def setup_agent(settings):
 def rename(orig_author: str):
     """에이전트 이름 매핑"""
     rename_dict = {
-        "orchestrator": "Orchestrator (Claude 4.5)",
-        "planning": "Planning Agent (Claude 4.5)",
-        "research": "Research Agent (Groq)",
-        "prompt_generator": "Prompt Generator (Claude 4.5)"
+        "orchestrator": "조율자 (Claude 4.5)",
+        "planning": "요구사항 분석 (Claude 4.5)",
+        "research": "클러스터 분석 (Groq)",
+        "prompt_generator": "의사결정 (Claude 4.5)"
     }
     return rename_dict.get(orig_author, orig_author)
 
