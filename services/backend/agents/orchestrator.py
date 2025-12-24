@@ -17,37 +17,39 @@ claude_orchestrator = ChatAnthropic(
 )
 
 
-ORCHESTRATOR_PROMPT = """You are the Orchestrator of a Multi-Agent System.
+ORCHESTRATOR_PROMPT = """You are the Orchestrator of a K8s Infrastructure Planning System.
 
 ## Role
-Coordinate agents to complete user requests efficiently.
+Coordinate agents to analyze K8s cluster and generate implementation plans.
 
 ## Available Agents
-- planning: Create task plans
-- research: Gather information (K8s, files, databases)
-- code_backend: Write backend code
-- code_frontend: Write frontend code
-- code_infrastructure: Write K8s/infrastructure code
-- review: Review and validate code
-- end: Complete the task
+- planning: Design folder structure, YAML organization, K8s resources
+- research: Analyze K8s cluster state (kubectl commands, resources, configs)
+- prompt_generator: Generate Markdown implementation prompt for other AI assistants
+- end: Complete the task and show final prompt
 
 ## Workflow
-1. Analyze user request
-2. Delegate to planning agent (if no plan exists)
-3. Coordinate research → code → review cycle
-4. Limit iterations to 3 maximum
-5. Return results to user
+1. User requests infrastructure deployment (e.g., "Deploy Tekton")
+2. Delegate to **planning** agent (if no plan exists)
+3. Delegate to **research** agent to analyze cluster state
+4. Delegate to **prompt_generator** to create implementation prompt
+5. End with final Markdown prompt for the user
+
+## Decision Logic
+- No plan exists → NEXT_AGENT: planning
+- Plan exists but no research → NEXT_AGENT: research
+- Plan + research exist but no prompt → NEXT_AGENT: prompt_generator
+- Prompt generated → NEXT_AGENT: end
 
 ## Output Format
 NEXT_AGENT: <agent_name>
 REASON: <explanation>
-MESSAGE: <message_to_agent>
 
 ## Tools Available
-- execute_host: Run commands on host system
+- execute_host: Run kubectl commands on host (use sparingly, research agent handles this)
 - execute_bash: Run commands in container
 
-Use tools only for simple verification. Delegate complex work to specialized agents.
+Limit iterations to 2 maximum. Keep workflow simple: planning → research → prompt_generator → end.
 """
 
 
@@ -59,19 +61,16 @@ def orchestrator_node(state: AgentState) -> AgentState:
     iteration_count = state.get("iteration_count", 0)
 
     # 컨텍스트 구성
-    context_parts = [f"현재 반복 횟수: {iteration_count}/3"]
+    context_parts = [f"현재 반복 횟수: {iteration_count}/2"]
 
     if state.get("task_plan"):
-        context_parts.append(f"작업 계획: {state['task_plan']}")
+        context_parts.append(f"✅ 계획 수립 완료")
 
     if state.get("research_data"):
-        context_parts.append(f"수집된 정보: {state['research_data']}")
+        context_parts.append(f"✅ 클러스터 분석 완료")
 
-    if state.get("code_outputs"):
-        context_parts.append(f"생성된 코드: {state['code_outputs']}")
-
-    if state.get("review_feedback"):
-        context_parts.append(f"리뷰 피드백: {state['review_feedback']}")
+    if state.get("implementation_prompt"):
+        context_parts.append(f"✅ 구현 프롬프트 생성 완료")
 
     context = "\n".join(context_parts)
 

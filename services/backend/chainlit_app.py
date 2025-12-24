@@ -22,20 +22,20 @@ except:
 async def start():
     """채팅 시작 시"""
     await cl.Message(
-        content="🤖 **Multi-Agent System v2.0**에 오신 것을 환영합니다!\n\n"
-                "저는 다음 전문가 팀과 함께 작업합니다:\n\n"
-                "**계획 & 조율**\n"
+        content="☸️ **K8s Infrastructure Planning System v3.0**에 오신 것을 환영합니다!\n\n"
+                "당신의 Kubernetes 클러스터 상태를 분석하고 인프라 배포 계획을 수립해드립니다.\n\n"
+                "**에이전트 팀**\n"
                 "- 🎼 **Orchestrator** (Claude 4.5): 전체 워크플로우 조율\n"
-                "- 📋 **Planning Agent** (Claude 4.5): 작업 계획 수립\n\n"
-                "**정보 수집**\n"
-                "- 🔍 **Research Agent** (Groq): 정보 수집 및 분석\n\n"
-                "**코드 작성**\n"
-                "- ⚙️ **Backend Agent** (Groq): 백엔드 개발\n"
-                "- 🎨 **Frontend Agent** (Groq): 프론트엔드 개발\n"
-                "- 🏗️ **Infrastructure Agent** (Groq): K8s/DevOps\n\n"
-                "**품질 보증**\n"
-                "- ✅ **Review Agent** (Claude): 코드 리뷰 & 테스트\n\n"
-                "무엇을 도와드릴까요?"
+                "- 📋 **Planning Agent** (Claude 4.5): 폴더 구조 & YAML 설계\n"
+                "- 🔍 **Research Agent** (Groq): K8s 클러스터 상태 분석\n"
+                "- 📝 **Prompt Generator** (Claude 4.5): 구현 가이드 생성\n\n"
+                "**사용 예시**\n"
+                "```\n"
+                "Tekton을 도입하고 싶어\n"
+                "Harbor를 배포하려고 해\n"
+                "Prometheus를 설치하고 싶어\n"
+                "```\n\n"
+                "배포하고 싶은 도구를 알려주세요!"
     ).send()
 
 
@@ -57,10 +57,8 @@ async def main(message: cl.Message):
             "current_agent": "orchestrator",
             "task_plan": None,
             "research_data": None,
-            "code_outputs": {},
-            "review_feedback": None,
+            "implementation_prompt": None,
             "iteration_count": 0,
-            "is_approved": False,
             "error": None
         }
         
@@ -81,27 +79,20 @@ async def main(message: cl.Message):
                     agent_content = last_message["content"]
 
                     # 사용자에게 보여줄 에이전트만 필터링
-                    user_facing_agents = ["planning", "research", "backend_developer",
-                                         "frontend_developer", "infrastructure_engineer", "review"]
+                    user_facing_agents = ["planning", "research", "prompt_generator"]
 
                     if agent_name in user_facing_agents:
                         # 에이전트별 아이콘
                         agent_icons = {
                             "planning": "📋",
                             "research": "🔍",
-                            "backend_developer": "⚙️",
-                            "frontend_developer": "🎨",
-                            "infrastructure_engineer": "🏗️",
-                            "review": "✅"
+                            "prompt_generator": "📝"
                         }
 
                         agent_display_names = {
-                            "planning": "계획 수립",
-                            "research": "정보 수집",
-                            "backend_developer": "백엔드 개발",
-                            "frontend_developer": "프론트엔드 개발",
-                            "infrastructure_engineer": "인프라 구성",
-                            "review": "코드 리뷰"
+                            "planning": "인프라 계획 수립",
+                            "research": "클러스터 상태 분석",
+                            "prompt_generator": "구현 가이드 생성"
                         }
 
                         icon = agent_icons.get(agent_name, "🤖")
@@ -124,13 +115,10 @@ async def main(message: cl.Message):
                         # Orchestrator는 간단한 상태 메시지만 표시
                         current_agent = state.get("current_agent", "")
                         status_icons = {
-                            "planning": "📋 계획 수립 중...",
-                            "research": "🔍 정보 수집 중...",
-                            "code_backend": "⚙️ 백엔드 코드 작성 중...",
-                            "code_frontend": "🎨 프론트엔드 코드 작성 중...",
-                            "code_infrastructure": "🏗️ 인프라 구성 중...",
-                            "review": "✅ 코드 검토 중...",
-                            "end": "✨ 완료!"
+                            "planning": "📋 인프라 계획 수립 중...",
+                            "research": "🔍 클러스터 상태 분석 중...",
+                            "prompt_generator": "📝 구현 가이드 생성 중...",
+                            "end": "✨ 완료! 아래 프롬프트를 복사하여 사용하세요."
                         }
                         status_text = status_icons.get(current_agent, "⏳ 작업 중...")
                         status_msg.content = status_text
@@ -164,10 +152,7 @@ def rename(orig_author: str):
         "orchestrator": "Orchestrator (Claude 4.5)",
         "planning": "Planning Agent (Claude 4.5)",
         "research": "Research Agent (Groq)",
-        "backend_developer": "Backend Agent (Groq)",
-        "frontend_developer": "Frontend Agent (Groq)",
-        "infrastructure_engineer": "Infrastructure Agent (Groq)",
-        "review": "Review Agent (Claude)"
+        "prompt_generator": "Prompt Generator (Claude 4.5)"
     }
     return rename_dict.get(orig_author, orig_author)
 
