@@ -65,6 +65,8 @@ def execute_host(command: str, timeout: int = 30, use_sudo: bool = False) -> str
 
     This works by entering the host's namespaces directly from the container.
     Much faster than SSH and no authentication needed!
+    
+    NOTE: Projects folder is located at /home/ubuntu/Projects/ on oracle-master server.
 
     Args:
         command: Command to run on the host system
@@ -89,13 +91,16 @@ def execute_host(command: str, timeout: int = 30, use_sudo: bool = False) -> str
         # -n: network namespace
         # -i: IPC namespace
         # Run as ubuntu user to avoid git "dubious ownership" errors
-        # Use 'su - ubuntu -c' for user commands, 'sudo' for privileged commands
+        # Use 'su ubuntu -c' (without -) to preserve current directory context
+        # This allows commands to work from SSH initial directory
         if use_sudo:
             # For sudo commands, run directly with sudo
             nsenter_command = f"nsenter -t 1 -m -u -n -i -- sh -c {subprocess.list2cmdline([f'sudo {command}'])}"
         else:
             # For regular commands, run as ubuntu user
-            nsenter_command = f"nsenter -t 1 -m -u -n -i -- su - ubuntu -c {subprocess.list2cmdline([command])}"
+            # Use 'su ubuntu -c' (not 'su - ubuntu -c') to preserve current directory
+            # This matches SSH behavior where you start from the initial directory
+            nsenter_command = f"nsenter -t 1 -m -u -n -i -- su ubuntu -c {subprocess.list2cmdline([command])}"
 
         result = subprocess.run(
             nsenter_command,

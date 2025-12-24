@@ -59,6 +59,7 @@ INFRASTRUCTURE_PROMPT = """당신은 Multi-Agent System의 **Infrastructure Code
 
 ### execute_host (호스트 작업용) ⭐ 주로 사용:
 nsenter를 통해 호스트에 직접 접근합니다.
+Projects 폴더는 /home/ubuntu/Projects/ 에 있습니다.
 - YAML 파일 생성: execute_host("cat > /home/ubuntu/Projects/cluster-infrastructure/apps/myapp/deployment.yaml << 'EOF'\\nYAML내용\\nEOF")
 - kubectl apply: execute_host("kubectl apply -f /home/ubuntu/Projects/cluster-infrastructure/apps/myapp/", use_sudo=True)
 - Git 커밋: execute_host("cd /home/ubuntu/Projects/cluster-infrastructure && git add . && git commit -m 'Add myapp'")
@@ -104,7 +105,12 @@ def infrastructure_code_node(state: AgentState) -> AgentState:
             tool_args = tool_call.get('args', {})
 
             try:
-                tool_func = bash_tools[0]
+                # tool_name에 따라 올바른 도구 선택
+                from tools.bash_tool import execute_bash, execute_host
+                if tool_name == "execute_host":
+                    tool_func = execute_host
+                else:
+                    tool_func = execute_bash
                 tool_result = tool_func.invoke(tool_args)
                 tool_outputs.append(f"\n🔧 **{tool_name}({tool_args.get('command', '')[:50]}...)**:\n{tool_result}")
             except Exception as e:
