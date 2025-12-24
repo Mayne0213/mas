@@ -26,7 +26,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 애플리케이션 코드 복사
 COPY *.py .
-COPY .chainlit .chainlit/
 COPY agents/ agents/
 COPY tools/ tools/
 
@@ -36,6 +35,6 @@ RUN mkdir -p /root/.chainlit
 # Chainlit 포트
 EXPOSE 8000
 
-# Chainlit 실행
-CMD ["chainlit", "run", "chainlit_app.py", "--host", "0.0.0.0", "--port", "8000"]
+# .chainlit 파일이 있으면 삭제하고 Chainlit 실행
+CMD sh -c "test -f /app/.chainlit && rm -f /app/.chainlit || true; chainlit run chainlit_app.py --host 0.0.0.0 --port 8000"
 

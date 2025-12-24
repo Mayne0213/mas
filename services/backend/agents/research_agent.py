@@ -1,13 +1,14 @@
 """
 Research Agent (Groq)
 정보 수집 및 문서/코드베이스 검색
+JSON 기반 명령어 생성 방식으로 재작성
 """
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from .state import AgentState
-from tools.bash_tool import bash_tools
 import os
 import json
+import re
 
 
 # Groq 모델 초기화 (OpenAI 호환)
@@ -22,53 +23,73 @@ groq_research = ChatOpenAI(
 RESEARCH_PROMPT = """You are the Research Agent in a Multi-Agent System.
 
 ## Role
-Collect and analyze information from the host system.
+Collect and analyze information from the host system by requesting command executions.
 
 ## Environment
 - Container: /app/
-- Host: Access via nsenter (execute_host tool)
-- Kubernetes cluster available on host
+- Host: Kubernetes cluster with kubectl access
 - Projects folder: /home/ubuntu/Projects/
 
-## Tools Available
+## Your Task
+1. Analyze what information you need to gather
+2. Request commands to be executed
+3. Analyze the results
+4. Provide comprehensive findings
 
-**execute_host(command, use_sudo=False)**: Run commands on the host system
-- Use sudo=True for kubectl commands
-- Examples: kubectl, find, ls, cat, git, psql
+## Command Request Format
+When you need to execute commands, output them in this EXACT JSON format:
+```json
+{
+  "commands": [
+    {"tool": "execute_host", "command": "kubectl get nodes", "use_sudo": true},
+    {"tool": "execute_bash", "command": "ls -la /app"}
+  ]
+}
+```
 
-**execute_bash(command)**: Run commands inside the container
-- Examples: curl, python, ls /app
+**IMPORTANT**:
+- Request 1-3 commands at a time (not too many!)
+- Use "execute_host" for host system commands (kubectl, git, etc.)
+- Use "execute_bash" for container commands
+- Set "use_sudo": true for kubectl commands
+- Output ONLY the JSON, nothing else when requesting commands
 
-## Output Format
-Provide results in JSON:
+## Final Report Format
+When you have enough information, provide a final report in JSON:
 ```json
 {
   "summary": "Brief summary of findings",
-  "findings": [{"category": "...", "data": "..."}],
-  "recommendations": ["..."]
+  "findings": [
+    {"category": "Infrastructure", "data": "K8s cluster with 3 nodes..."},
+    {"category": "CI/CD", "data": "Current tools: ArgoCD..."}
+  ],
+  "recommendations": ["Consider X because Y", "..."],
+  "tekton_recommendation": {
+    "should_use": true/false,
+    "reasons": ["reason 1", "reason 2"],
+    "alternatives": ["alternative 1", "alternative 2"]
+  }
 }
 ```
 
 ## Instructions
-- Use tools freely to gather information
-- Try multiple approaches if something fails
-- Provide actionable insights and recommendations
+- Start by requesting basic system info commands
+- Analyze results carefully
+- Request more specific commands based on findings
+- Provide actionable recommendations
+- Be concise and focused
 """
 
 
 def research_node(state: AgentState) -> AgentState:
     """
-    Research 노드: 정보 수집
+    Research 노드: 정보 수집 (JSON 기반 명령어 방식)
     """
     messages = state["messages"]
-    task_plan = state.get("task_plan", {})
-    research_needed = task_plan.get("research_needed", [])
-
-    # Groq에 bash 도구 바인딩
-    groq_with_tools = groq_research.bind_tools(bash_tools)
-
+    task_plan = state.get("task_plan") or {}
+    research_needed = task_plan.get("research_needed", []) if isinstance(task_plan, dict) else []
+    
     # 연구 요청 구성
-    # research_needed가 있으면 사용, 없으면 사용자의 원래 요청 사용
     if research_needed:
         research_request = f"다음 정보를 수집해주세요:\n" + "\n".join(f"- {item}" for item in research_needed)
     else:
@@ -82,90 +103,129 @@ def research_node(state: AgentState) -> AgentState:
             research_request = f"사용자 요청: {user_message}\n\n위 요청에 필요한 정보를 수집하고 분석해주세요."
         else:
             research_request = "현재 시스템 상태를 분석하고 필요한 정보를 수집해주세요."
-
-    # Groq 호출
-    response = groq_with_tools.invoke([
+    
+    # 대화 히스토리 (도구 실행 결과 포함)
+    conversation = [
         SystemMessage(content=RESEARCH_PROMPT),
         HumanMessage(content=research_request)
-    ])
-
-    # Tool calls 처리
+    ]
+    
     tool_outputs = []
-    max_iterations = 5  # 최대 반복 횟수 제한
+    max_iterations = 5
     iteration = 0
     
     while iteration < max_iterations:
         iteration += 1
+        print(f"\n{'='*80}")
+        print(f"Research Agent - Iteration {iteration}/{max_iterations}")
+        print(f"{'='*80}")
         
-        # Tool calls 확인
-        if hasattr(response, 'tool_calls') and response.tool_calls:
-            for tool_call in response.tool_calls:
-                tool_name = tool_call['name']
-                tool_args = tool_call.get('args', {})
-
-                # 도구 실행
-                try:
-                    # tool_name에 따라 올바른 도구 선택
-                    from tools.bash_tool import execute_bash, execute_host
-                    if tool_name == "execute_host":
-                        tool_func = execute_host
-                    else:
-                        tool_func = execute_bash
-                    tool_result = tool_func.invoke(tool_args)
-                    tool_outputs.append(f"\n🔧 **{tool_name}({tool_args.get('command', '')[:100]})**:\n{tool_result}")
-                except Exception as e:
-                    tool_outputs.append(f"\n❌ **{tool_name}** failed: {str(e)}")
-
-            # Tool 결과와 함께 재호출
-            if tool_outputs:
-                tool_context = "\n".join(tool_outputs[-10:])  # 최근 10개만 사용 (너무 길어지지 않도록)
-                response = groq_with_tools.invoke([
-                    SystemMessage(content=RESEARCH_PROMPT),
-                    HumanMessage(content=research_request),
-                    HumanMessage(content=f"도구 실행 결과:\n{tool_context}\n\n추가로 필요한 정보가 있으면 도구를 사용하고, 충분한 정보를 수집했으면 JSON 형식으로 정리해주세요.")
-                ])
-            else:
-                break  # tool_outputs가 비어있으면 종료
-        else:
-            # tool_calls가 없으면 종료
-            break
-
-    # content 추출 (response.content가 없을 수도 있음)
-    if hasattr(response, 'content') and response.content:
-        content = response.content
-    elif tool_outputs:
-        # content가 없지만 tool_outputs가 있으면 그것을 사용
-        content = "\n".join(tool_outputs) + "\n\n정보 수집 완료. 결과를 정리해주세요."
-    else:
-        content = "정보 수집을 완료했습니다."
-
-    # Tool outputs를 content에 포함
-    if tool_outputs:
-        content = "\n".join(tool_outputs) + "\n\n" + content
-
-    # JSON 파싱 시도
-    try:
-        if "```json" in content:
-            json_str = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            json_str = content.split("```")[1].split("```")[0].strip()
-        else:
-            json_str = content
-
-        research_data = json.loads(json_str)
-    except Exception:
-        research_data = {
-            "summary": "정보 수집 완료",
-            "findings": [{"category": "raw", "data": content}],
-            "recommendations": []
-        }
-
-    # 상태 업데이트
-    state["research_data"] = research_data
+        # Groq 호출
+        response = groq_research.invoke(conversation)
+        response_text = response.content
+        
+        print(f"Response: {response_text[:500]}...")
+        
+        # JSON 명령어 추출 시도
+        commands_executed = False
+        
+        # 방법 1: ```json ... ``` 블록에서 추출
+        json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+        if not json_match:
+            # 방법 2: 단순 {...} 블록 추출
+            json_match = re.search(r'(\{[^{}]*"commands"[^{}]*\[.*?\][^{}]*\})', response_text, re.DOTALL)
+        
+        if json_match:
+            try:
+                commands_data = json.loads(json_match.group(1))
+                
+                # commands가 있으면 실행
+                if "commands" in commands_data and commands_data["commands"]:
+                    commands_executed = True
+                    results = []
+                    
+                    for cmd_spec in commands_data["commands"][:5]:  # 최대 5개까지만
+                        tool_name = cmd_spec.get("tool", "execute_bash")
+                        command = cmd_spec.get("command", "")
+                        use_sudo = cmd_spec.get("use_sudo", False)
+                        
+                        if not command:
+                            continue
+                        
+                        print(f"\n🔧 Executing: {tool_name}('{command[:80]}...')")
+                        
+                        # 도구 실행
+                        try:
+                            from tools.bash_tool import execute_bash, execute_host
+                            
+                            if tool_name == "execute_host":
+                                result = execute_host.invoke({"command": command, "use_sudo": use_sudo})
+                            else:
+                                result = execute_bash.invoke({"command": command})
+                            
+                            results.append(f"Command: {command}\nResult: {result}")
+                            print(f"✅ Success")
+                            
+                        except Exception as e:
+                            error_msg = f"❌ Error: {str(e)}"
+                            results.append(f"Command: {command}\nResult: {error_msg}")
+                            print(error_msg)
+                    
+                    # 결과를 대화에 추가
+                    results_text = "\n\n".join(results)
+                    tool_outputs.append(results_text)
+                    conversation.append(HumanMessage(content=f"명령어 실행 결과:\n\n{results_text}\n\n계속 정보가 필요하면 추가 명령어를 요청하고, 충분한 정보를 수집했으면 최종 리포트를 JSON으로 제공해주세요."))
+                    
+                    continue  # 다음 반복으로
+                    
+                # 최종 리포트인 경우
+                elif "summary" in commands_data and "findings" in commands_data:
+                    print("\n✅ 최종 리포트 수신")
+                    # 최종 리포트를 content에 포함
+                    final_content = "\n".join(tool_outputs) + "\n\n## 최종 분석 결과\n\n" + json.dumps(commands_data, indent=2, ensure_ascii=False)
+                    
+                    state["research_data"] = commands_data
+                    state["messages"].append({
+                        "role": "research",
+                        "content": final_content
+                    })
+                    state["current_agent"] = "orchestrator"
+                    return state
+                    
+            except json.JSONDecodeError as e:
+                print(f"⚠️ JSON 파싱 실패: {e}")
+        
+        # 명령어도 없고 최종 리포트도 아니면 종료
+        if not commands_executed:
+            print("\n✅ 명령어 요청 없음, 종료")
+            # 텍스트 응답을 그대로 사용
+            content = "\n".join(tool_outputs) + "\n\n" + response_text
+            
+            state["research_data"] = {
+                "summary": "정보 수집 완료",
+                "findings": [{"category": "raw", "data": response_text}],
+                "recommendations": []
+            }
+            state["messages"].append({
+                "role": "research",
+                "content": content
+            })
+            state["current_agent"] = "orchestrator"
+            return state
+    
+    # 최대 반복 도달
+    print(f"\n⚠️ 최대 반복 횟수 도달 ({max_iterations})")
+    content = "\n".join(tool_outputs) + "\n\n정보 수집을 완료했습니다."
+    
+    state["research_data"] = {
+        "summary": "정보 수집 완료 (최대 반복 도달)",
+        "findings": [{"category": "raw", "data": content}],
+        "recommendations": []
+    }
     state["messages"].append({
         "role": "research",
         "content": content
     })
     state["current_agent"] = "orchestrator"
-
+    
     return state
