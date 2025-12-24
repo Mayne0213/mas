@@ -54,7 +54,7 @@ spec:
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: postgresql-root-password
+              name: postgresql-bluemayne-password
               key: password
         - name: GITEA_TOKEN
           valueFrom:
