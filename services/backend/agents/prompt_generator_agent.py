@@ -71,117 +71,35 @@ applications/{app-name}/
 ```
 
 ## Output Format (Markdown)
-Create a deployment guide following existing patterns:
+Create a CONCISE guide (MAX 25 lines total):
 
 ```markdown
-# [도구명] Kubernetes 배포 구현 가이드
+# [도구명] 배포 가이드
 
-## 🌐 환경 정보
-- **서버**: oracle-master
-- **Projects 루트**: `/home/ubuntu/Projects/`
-- **Kubernetes**: v[version]
+## 📍 배치
+`/home/ubuntu/Projects/[category]/[tool-name]/`
+**이유**: [1줄 설명]
+**참고**: [category]/[example]/ 구조 동일
 
-## 📍 배치 위치
+## 📂 구조
 \`\`\`
-/home/ubuntu/Projects/[category]/[tool-name]/
-\`\`\`
-**분류 기준**: [이 도구가 왜 이 카테고리에 속하는지 설명]
-
-**동일 카테고리 예시**:
-- `[category]/[example1]/` - [설명]
-- `[category]/[example2]/` - [설명]
-
-## 📂 필수 폴더 구조
-\`\`\`
-/home/ubuntu/Projects/[category]/[tool-name]/
-├── argocd/
-│   └── [tool-name].yaml    # ArgoCD Application 정의
-├── helm-values/            # (선택) Helm 사용 시
-│   └── [tool-name].yaml
-├── vault/                  # (필요시) 민감 정보
-│   └── *.yaml
-└── kustomization.yaml      # 리소스 목록
+[category]/[tool-name]/
+├── argocd/[tool-name].yaml
+├── kustomization.yaml
+└── vault/*.yaml (선택)
 \`\`\`
 
-## 📋 파일별 역할
+## 📋 파일
+- **argocd/**: ArgoCD Application (repoURL, path, namespace)
+- **kustomization.yaml**: 리소스 목록
+- **vault/**: ExternalSecret (평문 금지)
 
-### 1. `argocd/[tool-name].yaml`
-**용도**: ArgoCD Application 리소스 정의
-- `spec.source.repoURL`: Git 저장소 URL
-- `spec.source.path`: `[category]/[tool-name]`
-- `spec.destination.namespace`: 배포 네임스페이스
-- `spec.syncPolicy`: 자동 동기화 설정
-
-### 2. `helm-values/[tool-name].yaml` (선택)
-**용도**: Helm chart 사용 시 커스텀 values
-- Helm 배포 시에만 필요
-- 순수 manifest 배포 시 생략 가능
-
-### 3. `vault/` (필요시)
-**용도**: 민감 정보를 위한 ExternalSecret 리소스
-- Vault에서 자동 주입
-- 예: passwords, API keys, tokens
-- **중요**: 평문 Secret 리소스 사용 금지
-
-### 4. `kustomization.yaml`
-**용도**: 배포할 모든 리소스 목록
-- `resources:` 섹션에 모든 YAML 파일 나열
-- namespace, labels 등 공통 설정
-
-## 🔄 기존 패턴 준수 사항
-
-1. **ArgoCD 통합 (필수)**
-   - 모든 앱은 ArgoCD로 관리
-   - `/home/ubuntu/Projects/[category]/kustomization.yaml`에 추가 필요
-
-2. **Vault ExternalSecret (권장)**
-   - 민감 정보는 Vault 사용
-   - 평문 Secret 금지
-
-3. **일관된 네이밍 (필수)**
-   - 파일명: `[tool-name].yaml`
-   - 리소스 이름: `[tool-name]-*`
-
-## 📚 참고 예시
-
-**동일 카테고리 프로젝트 구조 참고**:
-```bash
-/home/ubuntu/Projects/applications/gitea/
-├── argocd/gitea.yaml
-├── helm-values/gitea.yaml
-├── vault/gitea-admin-secret.yaml
-└── kustomization.yaml
+## ✅ 필수
+- ArgoCD 통합
+- `/home/ubuntu/Projects/[category]/kustomization.yaml` 업데이트
 ```
 
-## 🚀 AI 생성 지침
-
-위 구조와 패턴을 준수하여:
-
-1. **적절한 카테고리 선택**
-   - applications, cluster-infrastructure, monitoring, databases 중 선택
-   - 선택 이유 명확히 설명
-
-2. **필수 파일 목록**
-   - argocd/[tool-name].yaml
-   - kustomization.yaml
-   - 필요 시: helm-values/, vault/
-
-3. **파일 역할만 설명**
-   - 세부 YAML 내용은 AI가 생성
-   - 구조와 필수 필드만 제시
-
-4. **기존 패턴 준수**
-   - ArgoCD, Vault, Kustomize 통합
-   - 평문 Secret 사용 금지
-
-## 🔍 배포 전 체크리스트
-- [ ] 올바른 카테고리에 배치
-- [ ] argocd/ 폴더 존재
-- [ ] kustomization.yaml 작성
-- [ ] 민감 정보는 Vault 사용
-- [ ] Git commit 및 push
-- [ ] ArgoCD 자동 배포 확인
-```
+CRITICAL: Response MUST be under 25 lines!
 
 ## Guidelines
 1. **폴더 구조와 파일 역할**만 명시 (세부 YAML은 AI가 생성)
