@@ -25,10 +25,10 @@ RESEARCH_PROMPT = """Research Agent: Analyze cluster or retrieve information.
 ## Two Modes
 
 ### Mode 1: Information Query (정보 조회)
-User wants specific information (password, status, list, etc.)
-- Execute the requested kubectl command
-- Return the result directly
-- No analysis needed
+User wants specific information (password, status, list, storage capacity, etc.)
+- Execute kubectl commands to get the information
+- Provide a clear, natural language answer
+- Focus on exactly what the user asked
 
 ### Mode 2: Deployment Analysis (배포 분석)
 User wants deployment decision
@@ -37,21 +37,24 @@ User wants deployment decision
 - Provide structured findings
 
 ## Request commands in JSON:
-{"commands": [{"tool": "execute_host", "command": "kubectl get nodes", "use_sudo": true}]}
+{"commands": [{"tool": "execute_bash", "command": "kubectl get nodes"}]}
 
 Rules:
 - Request 1-2 commands at a time
-- Use execute_host for kubectl commands (with use_sudo: true)
+- Use execute_bash for kubectl commands (kubectl is installed in the container)
 - Output ONLY JSON when requesting commands
+- For storage queries, use: kubectl get pvc, df -h, du -sh
+- For memory queries, use: kubectl top nodes, kubectl top pods
+- Be precise: storage ≠ memory
 
 ## Final report format
 
-### For Information Query:
-{
-  "summary": "정보 조회 완료",
-  "result": "actual command result",
-  "findings": [{"category": "조회 결과", "data": "..."}]
-}
+### For Information Query (IMPORTANT - Answer in natural Korean, NOT JSON):
+Provide a direct answer in natural Korean language. Examples:
+- "Gitea의 공유 스토리지는 10GB 할당되어 있으며, 현재 약 3.2GB를 사용 중입니다."
+- "현재 클러스터에는 3개의 노드가 실행 중입니다."
+
+DO NOT use JSON format for information queries. Just answer naturally.
 
 ### For Deployment Analysis:
 {
@@ -119,16 +122,18 @@ def research_node(state: AgentState) -> AgentState:
         response_text = response.content
         
         print(f"Response: {response_text[:500]}...")
-        
+        print(f"\n📝 Full Response:\n{response_text}\n")  # 디버깅용 전체 응답 출력
+
         # JSON 명령어 추출 시도
         commands_executed = False
-        
+        is_final_answer = False
+
         # 방법 1: ```json ... ``` 블록에서 추출
         json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
         if not json_match:
             # 방법 2: 단순 {...} 블록 추출
             json_match = re.search(r'(\{[^{}]*"commands"[^{}]*\[.*?\][^{}]*\})', response_text, re.DOTALL)
-        
+
         if json_match:
             try:
                 commands_data = json.loads(json_match.group(1))
@@ -168,71 +173,55 @@ def research_node(state: AgentState) -> AgentState:
                     # 결과를 대화에 추가 (최신 것만 유지)
                     results_text = "\n\n".join(results)
                     tool_outputs.append(results_text)
+
+                    # 요청 유형에 따라 다른 지시
+                    if request_type == "information_query":
+                        # 정보 조회: 자연어로 답변 지시
+                        next_instruction = f"명령어 실행 결과:\n\n{results_text}\n\n**이제 위 결과를 바탕으로 사용자의 질문에 자연스러운 한국어로 답변해주세요. JSON이 아닌 일반 문장으로 작성하세요. 핵심 정보만 간결하게 전달하세요.**"
+                    else:
+                        # 배포 분석: 선택권 제공
+                        next_instruction = f"명령어 실행 결과:\n\n{results_text}\n\n계속 정보가 필요하면 추가 명령어를 요청하고, 충분한 정보를 수집했으면 최종 리포트를 JSON으로 제공해주세요."
+
                     # 전체 히스토리 대신 시스템 프롬프트 + 초기 요청 + 최신 결과만 유지
                     conversation = [
                         SystemMessage(content=RESEARCH_PROMPT),
                         HumanMessage(content=research_request),
-                        HumanMessage(content=f"명령어 실행 결과:\n\n{results_text}\n\n계속 정보가 필요하면 추가 명령어를 요청하고, 충분한 정보를 수집했으면 최종 리포트를 JSON으로 제공해주세요.")
+                        HumanMessage(content=next_instruction)
                     ]
-                    
+
                     continue  # 다음 반복으로
                     
                 # 최종 리포트인 경우
                 elif "summary" in commands_data and "findings" in commands_data:
                     print("\n✅ 최종 리포트 수신")
+                    is_final_answer = True
 
                     # 요청 유형에 따라 다른 포맷
                     if request_type == "information_query":
-                        # 정보 조회: 결과만 간단히 표시
+                        # 정보 조회: result 필드가 있으면 그것을 자연어 답변으로 사용
                         result = commands_data.get("result", "")
-                        findings = commands_data.get("findings", [])
 
-                        summary_parts = ["✅ 조회 완료\n"]
-
-                        # 조회 결과
                         if result:
-                            summary_parts.append(f"**결과:**\n```\n{result}\n```")
-                        elif findings:
+                            # result가 있으면 그대로 사용 (자연어 답변)
+                            final_content = result.strip()
+                        else:
+                            # result가 없으면 findings에서 추출
+                            findings = commands_data.get("findings", [])
+                            summary_parts = []
                             for finding in findings[:3]:
                                 data = finding.get("data", "")
                                 if data:
-                                    summary_parts.append(f"{data}")
-
-                        final_content = "\n".join(summary_parts)
+                                    summary_parts.append(data)
+                            final_content = "\n".join(summary_parts) if summary_parts else "정보를 찾을 수 없습니다."
 
                         # 정보 조회는 바로 종료
                         state["current_agent"] = "end"
 
                     else:
-                        # 배포 분석: 상세 정보 표시
-                        cluster_info = commands_data.get("cluster_info", {})
-                        findings = commands_data.get("findings", [])
+                        # 배포 분석: 간단한 상태만 표시 (Decision agent가 상세 결과 표시)
+                        final_content = "✅ 분석 완료"
 
-                        summary_parts = ["✅ 분석 완료\n"]
-
-                        # 클러스터 정보
-                        if cluster_info:
-                            summary_parts.append("**클러스터 정보**")
-                            if cluster_info.get("k8s_version"):
-                                summary_parts.append(f"- Kubernetes: {cluster_info['k8s_version']}")
-                            if cluster_info.get("nodes"):
-                                summary_parts.append(f"- 노드: {cluster_info['nodes']}")
-                            if cluster_info.get("existing_tools"):
-                                tools = ", ".join(cluster_info['existing_tools'])
-                                summary_parts.append(f"- 기존 도구: {tools}")
-
-                        # 주요 발견사항
-                        if findings:
-                            summary_parts.append("\n**주요 발견사항**")
-                            for finding in findings[:5]:  # 최대 5개만
-                                category = finding.get("category", "")
-                                data = finding.get("data", "")
-                                if category and data:
-                                    summary_parts.append(f"- {category}: {data}")
-
-                        final_content = "\n".join(summary_parts)
-
-                        # 배포 분석은 orchestrator로 돌아감
+                        # 배포 분석은 orchestrator로 돌아감 (decision으로 이동)
                         state["current_agent"] = "orchestrator"
 
                     state["research_data"] = commands_data
@@ -245,39 +234,110 @@ def research_node(state: AgentState) -> AgentState:
             except json.JSONDecodeError as e:
                 print(f"⚠️ JSON 파싱 실패: {e}")
         
-        # 명령어도 없고 최종 리포트도 아니면 종료
-        if not commands_executed:
-            print("\n✅ 명령어 요청 없음, 종료")
+        # 명령어도 없고 최종 리포트도 아니면 자연어 답변으로 간주
+        if not commands_executed and not is_final_answer:
+            print("\n✅ 자연어 답변 수신")
 
-            # 간단한 요약만 표시
-            content = "✅ 분석 완료\n\n기본 정보가 수집되었습니다."
+            # 요청 유형에 따라 다른 출력
+            if request_type == "information_query":
+                # 정보 조회: Claude 응답을 간결하게 표시
+                # JSON이 아닌 자연어 답변인지 확인
+                if not response_text.strip().startswith('{'):
+                    content = response_text.strip()
+                else:
+                    # 만약 JSON이면 파싱해서 표시
+                    try:
+                        data = json.loads(response_text)
+                        if "result" in data:
+                            content = data["result"]
+                        else:
+                            content = response_text
+                    except:
+                        content = response_text
+
+                state["current_agent"] = "end"
+            else:
+                # 배포 분석: 간단한 메시지만 (Decision agent가 상세 결과 표시)
+                content = "✅ 분석 완료"
+                state["current_agent"] = "orchestrator"
 
             state["research_data"] = {
                 "summary": "정보 수집 완료",
-                "findings": [{"category": "기본", "data": "클러스터 정보 수집 완료"}],
+                "findings": [{"category": "분석", "data": response_text}],
                 "recommendations": []
             }
             state["messages"].append({
                 "role": "research",
                 "content": content
             })
-            state["current_agent"] = "orchestrator"
             return state
     
     # 최대 반복 도달
     print(f"\n⚠️ 최대 반복 횟수 도달 ({max_iterations})")
 
-    content = "✅ 분석 완료\n\n기본 클러스터 정보가 수집되었습니다."
+    # 요청 유형에 따라 다른 출력
+    if request_type == "information_query":
+        # 정보 조회: 수집된 정보를 바탕으로 사용자 친화적인 답변 생성
+        if tool_outputs:
+            outputs_text = "\n\n".join(tool_outputs)
 
-    state["research_data"] = {
-        "summary": "정보 수집 완료",
-        "findings": [{"category": "클러스터", "data": "기본 정보 수집 완료"}],
-        "recommendations": []
-    }
+            # Claude에게 결과 해석 요청
+            print("\n📝 결과 해석 요청 중...")
+            interpretation_prompt = f"""수집된 정보를 바탕으로 사용자 질문에 답변해주세요.
+
+**사용자 질문:** {user_message}
+
+**수집된 정보:**
+{outputs_text}
+
+위 정보를 바탕으로:
+1. 사용자 질문에 직접적으로 답변
+2. 한국어로 간결하게 작성
+3. 핵심 정보만 포함
+4. 기술적 세부사항은 필요시에만 포함
+
+답변:"""
+
+            interpretation_response = claude_research.invoke([
+                HumanMessage(content=interpretation_prompt)
+            ])
+
+            content = f"✅ 조회 완료\n\n{interpretation_response.content}"
+
+            state["research_data"] = {
+                "summary": "정보 수집 완료",
+                "findings": [{"category": "클러스터 정보", "data": outputs_text}],
+                "recommendations": []
+            }
+        else:
+            content = "✅ 조회 완료\n\n⚠️ 충분한 정보를 수집하지 못했습니다."
+            state["research_data"] = {
+                "summary": "정보 수집 불완전",
+                "findings": [{"category": "경고", "data": "추가 정보 필요"}],
+                "recommendations": []
+            }
+        state["current_agent"] = "end"
+    else:
+        # 배포 분석: 간단한 메시지만 (Decision agent가 상세 결과 표시)
+        content = "✅ 분석 완료"
+        if tool_outputs:
+            outputs_text = "\n\n".join(tool_outputs)
+            state["research_data"] = {
+                "summary": "정보 수집 완료",
+                "findings": [{"category": "클러스터 정보", "data": outputs_text}],
+                "recommendations": []
+            }
+        else:
+            state["research_data"] = {
+                "summary": "정보 수집 불완전",
+                "findings": [{"category": "경고", "data": "추가 정보 필요"}],
+                "recommendations": []
+            }
+        state["current_agent"] = "orchestrator"
+
     state["messages"].append({
         "role": "research",
         "content": content
     })
-    state["current_agent"] = "orchestrator"
 
     return state
