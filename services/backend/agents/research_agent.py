@@ -20,27 +20,37 @@ groq_research = ChatOpenAI(
 )
 
 
-RESEARCH_PROMPT = """Research Agent: Collect system info via commands.
+RESEARCH_PROMPT = """Research Agent: Analyze Kubernetes cluster state.
 
 Request commands in JSON:
 {"commands": [{"tool": "execute_host", "command": "kubectl get nodes", "use_sudo": true}]}
 
 Rules:
 - Request 1-2 commands at a time
-- Use execute_host for kubectl/git, execute_bash for container
+- Use execute_host for kubectl commands (with use_sudo: true)
+- Focus on: version, existing tools, resources, nodes
 - Output ONLY JSON when requesting commands
 
-Final report format:
+Final report format (Korean):
 {
-  "summary": "Brief findings",
-  "findings": [{"category": "...", "data": "..."}],
-  "recommendations": ["..."],
-  "tekton_recommendation": {
-    "should_use": true/false,
-    "reasons": ["..."],
-    "alternatives": ["..."]
+  "summary": "클러스터 상태 요약",
+  "cluster_info": {
+    "k8s_version": "v1.x.x",
+    "nodes": "3 nodes (1 control-plane, 2 workers)",
+    "existing_tools": ["ArgoCD", "Gitea", "Prometheus"]
+  },
+  "findings": [
+    {"category": "기존 CI/CD", "data": "ArgoCD 운영 중"},
+    {"category": "리소스", "data": "충분한 여유 있음"}
+  ],
+  "recommendation": {
+    "deploy": true/false,
+    "reasons": ["이유1", "이유2"],
+    "alternatives": ["대안1", "대안2"]
   }
 }
+
+Keep findings concise and actionable. Focus on decision-making data.
 """
 
 
