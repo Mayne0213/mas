@@ -74,67 +74,67 @@ async def main(message: cl.Message):
 
         # MAS 그래프 실행
         async for event in mas_graph.astream(initial_state):
-        for node_name, state in event.items():
-            if node_name != "__end__":
-                last_message = state["messages"][-1]
-                agent_name = last_message["role"]
-                agent_content = last_message["content"]
+            for node_name, state in event.items():
+                if node_name != "__end__":
+                    last_message = state["messages"][-1]
+                    agent_name = last_message["role"]
+                    agent_content = last_message["content"]
 
-                # 사용자에게 보여줄 에이전트만 필터링
-                user_facing_agents = ["planning", "research", "backend_developer",
-                                     "frontend_developer", "infrastructure_engineer", "review"]
+                    # 사용자에게 보여줄 에이전트만 필터링
+                    user_facing_agents = ["planning", "research", "backend_developer",
+                                         "frontend_developer", "infrastructure_engineer", "review"]
 
-                if agent_name in user_facing_agents:
-                    # 에이전트별 아이콘
-                    agent_icons = {
-                        "planning": "📋",
-                        "research": "🔍",
-                        "backend_developer": "⚙️",
-                        "frontend_developer": "🎨",
-                        "infrastructure_engineer": "🏗️",
-                        "review": "✅"
-                    }
+                    if agent_name in user_facing_agents:
+                        # 에이전트별 아이콘
+                        agent_icons = {
+                            "planning": "📋",
+                            "research": "🔍",
+                            "backend_developer": "⚙️",
+                            "frontend_developer": "🎨",
+                            "infrastructure_engineer": "🏗️",
+                            "review": "✅"
+                        }
 
-                    agent_display_names = {
-                        "planning": "계획 수립",
-                        "research": "정보 수집",
-                        "backend_developer": "백엔드 개발",
-                        "frontend_developer": "프론트엔드 개발",
-                        "infrastructure_engineer": "인프라 구성",
-                        "review": "코드 리뷰"
-                    }
+                        agent_display_names = {
+                            "planning": "계획 수립",
+                            "research": "정보 수집",
+                            "backend_developer": "백엔드 개발",
+                            "frontend_developer": "프론트엔드 개발",
+                            "infrastructure_engineer": "인프라 구성",
+                            "review": "코드 리뷰"
+                        }
 
-                    icon = agent_icons.get(agent_name, "🤖")
-                    display_name = agent_display_names.get(agent_name, agent_name)
+                        icon = agent_icons.get(agent_name, "🤖")
+                        display_name = agent_display_names.get(agent_name, agent_name)
 
-                    # 내부 라우팅 정보 제거 (NEXT_AGENT, REASON 등)
-                    cleaned_content = agent_content
-                    for keyword in ["NEXT_AGENT:", "REASON:", "MESSAGE:"]:
-                        if keyword in cleaned_content:
-                            # 라우팅 정보가 포함된 경우 해당 부분 제거
-                            lines = cleaned_content.split("\n")
-                            cleaned_lines = [line for line in lines if not line.strip().startswith(keyword.replace(":", ""))]
-                            cleaned_content = "\n".join(cleaned_lines)
+                        # 내부 라우팅 정보 제거 (NEXT_AGENT, REASON 등)
+                        cleaned_content = agent_content
+                        for keyword in ["NEXT_AGENT:", "REASON:", "MESSAGE:"]:
+                            if keyword in cleaned_content:
+                                # 라우팅 정보가 포함된 경우 해당 부분 제거
+                                lines = cleaned_content.split("\n")
+                                cleaned_lines = [line for line in lines if not line.strip().startswith(keyword.replace(":", ""))]
+                                cleaned_content = "\n".join(cleaned_lines)
 
-                    # 스트리밍 업데이트
-                    response_msg.content += f"\n\n{icon} **{display_name}**:\n{cleaned_content.strip()}"
-                    await response_msg.update()
+                        # 스트리밍 업데이트
+                        response_msg.content += f"\n\n{icon} **{display_name}**:\n{cleaned_content.strip()}"
+                        await response_msg.update()
 
-                elif agent_name == "orchestrator":
-                    # Orchestrator는 간단한 상태 메시지만 표시
-                    current_agent = state.get("current_agent", "")
-                    status_icons = {
-                        "planning": "📋 계획 수립 중...",
-                        "research": "🔍 정보 수집 중...",
-                        "code_backend": "⚙️ 백엔드 코드 작성 중...",
-                        "code_frontend": "🎨 프론트엔드 코드 작성 중...",
-                        "code_infrastructure": "🏗️ 인프라 구성 중...",
-                        "review": "✅ 코드 검토 중...",
-                        "end": "✨ 완료!"
-                    }
-                    status_text = status_icons.get(current_agent, "⏳ 작업 중...")
-                    status_msg.content = status_text
-                    await status_msg.update()
+                    elif agent_name == "orchestrator":
+                        # Orchestrator는 간단한 상태 메시지만 표시
+                        current_agent = state.get("current_agent", "")
+                        status_icons = {
+                            "planning": "📋 계획 수립 중...",
+                            "research": "🔍 정보 수집 중...",
+                            "code_backend": "⚙️ 백엔드 코드 작성 중...",
+                            "code_frontend": "🎨 프론트엔드 코드 작성 중...",
+                            "code_infrastructure": "🏗️ 인프라 구성 중...",
+                            "review": "✅ 코드 검토 중...",
+                            "end": "✨ 완료!"
+                        }
+                        status_text = status_icons.get(current_agent, "⏳ 작업 중...")
+                        status_msg.content = status_text
+                        await status_msg.update()
 
         # 상태 메시지 제거
         await status_msg.remove()
