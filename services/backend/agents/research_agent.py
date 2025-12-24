@@ -37,11 +37,11 @@ User wants deployment decision
 - Provide structured findings
 
 ## Request commands in JSON:
-{"commands": [{"tool": "execute_bash", "command": "kubectl get nodes"}]}
+{"commands": [{"tool": "execute_host", "command": "kubectl get nodes", "use_sudo": true}]}
 
 Rules:
 - Request 1-2 commands at a time
-- Use execute_bash for kubectl commands (kubectl is installed in the container)
+- Use execute_host for kubectl commands (with use_sudo: true)
 - Output ONLY JSON when requesting commands
 - For storage queries, use: kubectl get pvc, df -h, du -sh
 - For memory queries, use: kubectl top nodes, kubectl top pods
