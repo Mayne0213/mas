@@ -44,7 +44,7 @@ spec:
           value: "postgresql://bluemayne:$(POSTGRES_PASSWORD)@postgresql-primary.postgresql.svc.cluster.local:5432/mas"
         # SQLAlchemy format (if needed)
         - name: DATABASE_URL
-          value: "postgresql+asyncpg://bluemayne:$(POSTGRES_PASSWORD)@postgresql-primary.postgresql.svc.cluster.local:5432/mas"
+          value: "postgresql://bluemayne:$(POSTGRES_PASSWORD)@postgresql-primary.postgresql.svc.cluster.local:5432/mas"
         - name: POSTGRES_HOST
           value: "postgresql-primary.postgresql.svc.cluster.local"
         - name: POSTGRES_PORT
