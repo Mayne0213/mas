@@ -189,7 +189,7 @@ def research_node(state: AgentState) -> AgentState:
 
     # Tool calls 처리
     tool_outputs = []
-    max_iterations = 3  # 최대 반복 횟수 제한
+    max_iterations = 5  # 최대 반복 횟수 제한
     iteration = 0
     
     while iteration < max_iterations:
@@ -225,9 +225,17 @@ def research_node(state: AgentState) -> AgentState:
             else:
                 break  # tool_outputs가 비어있으면 종료
         else:
-            break  # tool_calls가 없으면 종료
+            # tool_calls가 없으면 종료
+            break
 
-    content = response.content
+    # content 추출 (response.content가 없을 수도 있음)
+    if hasattr(response, 'content') and response.content:
+        content = response.content
+    elif tool_outputs:
+        # content가 없지만 tool_outputs가 있으면 그것을 사용
+        content = "\n".join(tool_outputs) + "\n\n정보 수집 완료. 결과를 정리해주세요."
+    else:
+        content = "정보 수집을 완료했습니다."
 
     # Tool outputs를 content에 포함
     if tool_outputs:
