@@ -5,6 +5,7 @@ Review & Test Agent (Claude)
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
 from .state import AgentState
+from tools.bash_tool import bash_tools
 import os
 import json
 
@@ -23,8 +24,15 @@ REVIEW_PROMPT = """당신은 Multi-Agent System의 **Review & Test Agent**입니
 - 생성된 코드의 품질 검증
 - 보안 취약점 검사
 - 성능 및 확장성 평가
-- 테스트 전략 수립
+- 테스트 전략 수립 및 실행
 - 개선 사항 제안
+
+## 사용 가능한 도구
+**execute_bash**: 코드 검증을 위한 bash 명령어 실행
+- 테스트 실행: pytest, npm test, go test
+- 린터 실행: pylint, eslint, golangci-lint
+- 빌드 검증: docker build, npm run build
+- 배포 확인: kubectl get pods, kubectl logs
 
 ## 검토 항목
 
@@ -112,16 +120,44 @@ def review_node(state: AgentState) -> AgentState:
 생성된 코드:
 {code_summary}
 
-위 코드를 검토하고 JSON 형식으로 피드백을 제공해주세요.
+위 코드를 검토하고, 필요시 테스트를 실행한 후 JSON 형식으로 피드백을 제공해주세요.
 """
 
+    # Claude에 bash 도구 바인딩
+    claude_with_tools = claude_review.bind_tools(bash_tools)
+
     # Claude 호출
-    response = claude_review.invoke([
+    response = claude_with_tools.invoke([
         SystemMessage(content=REVIEW_PROMPT),
         HumanMessage(content=review_request)
     ])
 
+    # Tool calls 처리
+    tool_outputs = []
+    if hasattr(response, 'tool_calls') and response.tool_calls:
+        for tool_call in response.tool_calls:
+            tool_name = tool_call['name']
+            tool_args = tool_call.get('args', {})
+
+            try:
+                tool_func = bash_tools[0]
+                tool_result = tool_func.invoke(tool_args)
+                tool_outputs.append(f"\n🔧 **Review {tool_name}({tool_args.get('command', '')[:50]}...)**:\n{tool_result}")
+            except Exception as e:
+                tool_outputs.append(f"\n❌ **{tool_name}** failed: {str(e)}")
+
+        # Tool 결과와 함께 재호출
+        if tool_outputs:
+            tool_context = "\n".join(tool_outputs)
+            response = claude_review.invoke([
+                SystemMessage(content=REVIEW_PROMPT),
+                HumanMessage(content=review_request),
+                HumanMessage(content=f"도구 실행 결과:\n{tool_context}\n\n이제 JSON 형식으로 최종 리뷰를 제공해주세요.")
+            ])
+
     content = response.content
+    if tool_outputs:
+        content = "\n".join(tool_outputs) + "\n\n" + content
 
     # JSON 파싱 시도
     try:

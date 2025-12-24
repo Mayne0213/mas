@@ -5,6 +5,7 @@ Orchestrator Agent (Claude 4.5)
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
 from .state import AgentState
+from tools.bash_tool import bash_tools
 import os
 
 
@@ -23,6 +24,13 @@ ORCHESTRATOR_PROMPT = """당신은 Multi-Agent System의 **총괄 조율자(Orch
 - 각 에이전트의 결과를 검토하고 다음 단계 결정
 - 최종 출력물의 품질 보증
 - 에러 발생 시 복구 전략 수립
+- 필요시 직접 bash 명령어 실행 (간단한 조회/검증)
+
+## 사용 가능한 도구
+**execute_bash**: 필요한 경우 직접 bash 명령어를 실행할 수 있습니다.
+- 간단한 상태 확인: kubectl get pods, git status
+- 파일 조회: cat, ls
+- 빠른 검증 작업
 
 ## 워크플로우
 1. 사용자 요청 분석
@@ -80,13 +88,41 @@ def orchestrator_node(state: AgentState) -> AgentState:
     # 사용자 요청
     user_request = messages[-1]["content"] if messages else ""
 
+    # Claude에 bash 도구 바인딩
+    claude_with_tools = claude_orchestrator.bind_tools(bash_tools)
+
     # Claude 호출
-    response = claude_orchestrator.invoke([
+    response = claude_with_tools.invoke([
         SystemMessage(content=ORCHESTRATOR_PROMPT),
         HumanMessage(content=f"사용자 요청: {user_request}\n\n현재 상태:\n{context}")
     ])
 
+    # Tool calls 처리
+    tool_outputs = []
+    if hasattr(response, 'tool_calls') and response.tool_calls:
+        for tool_call in response.tool_calls:
+            tool_name = tool_call['name']
+            tool_args = tool_call.get('args', {})
+
+            try:
+                tool_func = bash_tools[0]
+                tool_result = tool_func.invoke(tool_args)
+                tool_outputs.append(f"\n🔧 **Orchestrator {tool_name}({tool_args.get('command', '')[:50]}...)**:\n{tool_result}")
+            except Exception as e:
+                tool_outputs.append(f"\n❌ **{tool_name}** failed: {str(e)}")
+
+        # Tool 결과와 함께 재호출
+        if tool_outputs:
+            tool_context = "\n".join(tool_outputs)
+            response = claude_orchestrator.invoke([
+                SystemMessage(content=ORCHESTRATOR_PROMPT),
+                HumanMessage(content=f"사용자 요청: {user_request}\n\n현재 상태:\n{context}"),
+                HumanMessage(content=f"도구 실행 결과:\n{tool_context}")
+            ])
+
     content = response.content
+    if tool_outputs:
+        content = "\n".join(tool_outputs) + "\n\n" + content
 
     # 다음 에이전트 파싱
     next_agent = "planning"  # 기본값
