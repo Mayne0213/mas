@@ -119,10 +119,11 @@ def research_node(state: AgentState) -> AgentState:
         response_text = response.content
         
         print(f"Response: {response_text[:500]}...")
-        
+        print(f"\n📝 Full Response:\n{response_text}\n")  # 디버깅용 전체 응답 출력
+
         # JSON 명령어 추출 시도
         commands_executed = False
-        
+
         # 방법 1: ```json ... ``` 블록에서 추출
         json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
         if not json_match:
@@ -207,8 +208,13 @@ def research_node(state: AgentState) -> AgentState:
                         # 배포 분석: 상세 정보 표시
                         cluster_info = commands_data.get("cluster_info", {})
                         findings = commands_data.get("findings", [])
+                        summary = commands_data.get("summary", "")
 
                         summary_parts = ["✅ 분석 완료\n"]
+
+                        # 요약 추가
+                        if summary:
+                            summary_parts.append(f"{summary}\n")
 
                         # 클러스터 정보
                         if cluster_info:
@@ -230,6 +236,10 @@ def research_node(state: AgentState) -> AgentState:
                                 if category and data:
                                     summary_parts.append(f"- {category}: {data}")
 
+                        # 만약 아무 데이터도 없으면 원본 응답 사용
+                        if len(summary_parts) == 1 and not summary:
+                            summary_parts.append(f"\n{response_text}")
+
                         final_content = "\n".join(summary_parts)
 
                         # 배포 분석은 orchestrator로 돌아감
@@ -247,14 +257,14 @@ def research_node(state: AgentState) -> AgentState:
         
         # 명령어도 없고 최종 리포트도 아니면 종료
         if not commands_executed:
-            print("\n✅ 명령어 요청 없음, 종료")
+            print("\n✅ 명령어 요청 없음, Claude 응답을 그대로 사용")
 
-            # 간단한 요약만 표시
-            content = "✅ 분석 완료\n\n기본 정보가 수집되었습니다."
+            # Claude의 원본 응답을 사용
+            content = f"✅ 분석 완료\n\n{response_text}"
 
             state["research_data"] = {
                 "summary": "정보 수집 완료",
-                "findings": [{"category": "기본", "data": "클러스터 정보 수집 완료"}],
+                "findings": [{"category": "분석", "data": response_text}],
                 "recommendations": []
             }
             state["messages"].append({
@@ -267,13 +277,23 @@ def research_node(state: AgentState) -> AgentState:
     # 최대 반복 도달
     print(f"\n⚠️ 최대 반복 횟수 도달 ({max_iterations})")
 
-    content = "✅ 분석 완료\n\n기본 클러스터 정보가 수집되었습니다."
+    # 수집된 도구 출력이 있으면 사용
+    if tool_outputs:
+        outputs_text = "\n\n".join(tool_outputs)
+        content = f"✅ 분석 완료\n\n**수집된 정보:**\n{outputs_text}"
+        state["research_data"] = {
+            "summary": "정보 수집 완료",
+            "findings": [{"category": "클러스터 정보", "data": outputs_text}],
+            "recommendations": []
+        }
+    else:
+        content = "✅ 분석 완료\n\n⚠️ 충분한 정보를 수집하지 못했습니다. 수동으로 확인해주세요."
+        state["research_data"] = {
+            "summary": "정보 수집 불완전",
+            "findings": [{"category": "경고", "data": "추가 정보 필요"}],
+            "recommendations": []
+        }
 
-    state["research_data"] = {
-        "summary": "정보 수집 완료",
-        "findings": [{"category": "클러스터", "data": "기본 정보 수집 완료"}],
-        "recommendations": []
-    }
     state["messages"].append({
         "role": "research",
         "content": content
