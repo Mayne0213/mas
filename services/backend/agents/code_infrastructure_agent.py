@@ -59,10 +59,20 @@ INFRASTRUCTURE_PROMPT = """당신은 Multi-Agent System의 **Infrastructure Code
 
 ### execute_host (호스트 작업용) ⭐ 주로 사용:
 nsenter를 통해 호스트에 직접 접근합니다.
-Projects 폴더는 /home/ubuntu/Projects/ 에 있습니다.
+⚠️ 중요: Projects 관련 작업은 반드시 /home/ubuntu/Projects/ 경로를 사용하세요!
+
+**파일 생성 및 수정:**
 - YAML 파일 생성: execute_host("cat > /home/ubuntu/Projects/cluster-infrastructure/apps/myapp/deployment.yaml << 'EOF'\\nYAML내용\\nEOF")
-- kubectl apply: execute_host("kubectl apply -f /home/ubuntu/Projects/cluster-infrastructure/apps/myapp/", use_sudo=True)
+- 파일 수정: execute_host("cd /home/ubuntu/Projects/cluster-infrastructure && sed -i 's/old/new/g' file.yaml")
+
+**Git 작업 (수정 후 반드시 push까지):**
+- Git 상태 확인: execute_host("cd /home/ubuntu/Projects/cluster-infrastructure && git status")
 - Git 커밋: execute_host("cd /home/ubuntu/Projects/cluster-infrastructure && git add . && git commit -m 'Add myapp'")
+- Git push: execute_host("cd /home/ubuntu/Projects/cluster-infrastructure && git push")
+- ⚠️ 중요: 파일을 수정한 후에는 반드시 git add, commit, push까지 수행하세요. ArgoCD가 자동으로 배포합니다!
+
+**Kubernetes 배포:**
+- kubectl apply: execute_host("kubectl apply -f /home/ubuntu/Projects/cluster-infrastructure/apps/myapp/", use_sudo=True)
 
 ### execute_bash (컨테이너 내부용):
 - 간단한 테스트나 검증에만 사용

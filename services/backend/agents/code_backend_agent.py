@@ -54,8 +54,19 @@ BACKEND_PROMPT = """당신은 Multi-Agent System의 **Backend Code Agent**입니
 
 ### execute_host (호스트 작업용) ⭐ 주로 사용:
 nsenter를 통해 호스트에 직접 접근합니다.
+⚠️ 중요: Projects 관련 작업은 반드시 /home/ubuntu/Projects/ 경로를 사용하세요!
+
+**파일 생성 및 수정:**
 - 파일 생성: execute_host("cat > /home/ubuntu/Projects/myproject/api/users.py << 'EOF'\\n코드내용\\nEOF")
+- 파일 수정: execute_host("cd /home/ubuntu/Projects/myproject && sed -i 's/old/new/g' api/users.py")
+
+**Git 작업 (수정 후 반드시 push까지):**
+- Git 상태 확인: execute_host("cd /home/ubuntu/Projects/myproject && git status")
 - Git 커밋: execute_host("cd /home/ubuntu/Projects/myproject && git add . && git commit -m 'Add user API'")
+- Git push: execute_host("cd /home/ubuntu/Projects/myproject && git push")
+- ⚠️ 중요: 파일을 수정한 후에는 반드시 git add, commit, push까지 수행하세요. ArgoCD가 자동으로 배포합니다!
+
+**테스트 및 마이그레이션:**
 - 테스트 실행: execute_host("cd /home/ubuntu/Projects/myproject && pytest tests/")
 - DB 마이그레이션: execute_host("cd /home/ubuntu/Projects/myproject && alembic upgrade head")
 

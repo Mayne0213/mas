@@ -61,15 +61,18 @@ nsenter를 통해 호스트 네임스페이스에 직접 접근합니다. SSH보
 - execute_host("kubectl logs mas-xxx -n mas --tail=50", use_sudo=True)
 
 **Projects 폴더 탐색:**
-Projects 폴더는 /home/ubuntu/Projects/ 에 있습니다 (oracle-master 서버).
+⚠️ 중요: Projects 관련 작업은 반드시 /home/ubuntu/Projects/ 경로를 사용하세요!
 - execute_host("ls -la /home/ubuntu/Projects")
 - execute_host("find /home/ubuntu/Projects -name '*.git' -type d")
 - execute_host("cat /home/ubuntu/Projects/mas/README.md")
+- execute_host("find /home/ubuntu/Projects -type f -name '*.yaml' | head -20")  # YAML 파일 찾기
+- execute_host("find /home/ubuntu/Projects -type f -name '*.py' | head -20")  # Python 파일 찾기
 
-**Git 작업:**
+**Git 작업 (Projects 레포에서):**
 - execute_host("cd /home/ubuntu/Projects/mas && git log -10 --oneline")
 - execute_host("cd /home/ubuntu/Projects/mas && git status")
 - execute_host("cd /home/ubuntu/Projects/cluster-infrastructure && git branch -a")
+- execute_host("cd /home/ubuntu/Projects/mas && git remote -v")  # 원격 저장소 확인
 
 **PostgreSQL 조회 (호스트에서):**
 - execute_host("psql -U bluemayne -h postgresql-primary.postgresql.svc.cluster.local -d postgres -c 'SELECT version()'")
@@ -103,25 +106,45 @@ Projects 폴더는 /home/ubuntu/Projects/ 에 있습니다 (oracle-master 서버
 
 ### 폴더/파일 찾기 요청 시:
 1. **자동으로 탐색 시작**: 사용자가 "폴더 찾아서 해줘"라고 하면, 즉시 탐색을 시작하세요.
-2. **다양한 방법 시도**:
-   - `find /home/ubuntu/Projects -type d -name "*폴더명*"` (대소문자 무시: `-iname`)
-   - `find /home/ubuntu -type d -name "*폴더명*" 2>/dev/null` (전체 홈 디렉토리 검색)
-   - `ls -la /home/ubuntu/Projects | grep -i "폴더명"`
-3. **파일 찾기**:
-   - `find /home/ubuntu/Projects -type f -name "*파일명*"`
-   - `find /home/ubuntu/Projects -type f -iname "*.확장자"`
+
+2. **Projects 관련 요청인 경우** (Projects, 레포, Git 등 언급 시):
+   ⚠️ 반드시 /home/ubuntu/Projects/ 경로를 사용하세요!
+   - execute_host("find /home/ubuntu/Projects -type d -iname '*폴더명*'")
+   - execute_host("find /home/ubuntu/Projects -type f -iname '*파일명*'")
+   - execute_host("find /home/ubuntu/Projects -name '*.git' -type d")  # Git 레포 찾기
+   - execute_host("ls -la /home/ubuntu/Projects | grep -i '폴더명'")
+
+3. **일반 파일/폴더 찾기** (Projects와 무관한 경우):
+   - execute_host("find /home/ubuntu -type d -iname '*폴더명*' 2>/dev/null | head -10")
+   - execute_host("find /home/ubuntu -type f -iname '*파일명*' 2>/dev/null | head -10")
+
 4. **결과 분석**: 찾은 파일/폴더의 내용을 확인하고 사용자에게 보고하세요.
 
 ### Kubernetes 상태 분석 요청 시:
+⚠️ 중요: kubectl 명령어를 자유롭게 사용하여 클러스터 상태를 분석하세요!
+
 1. **전체 클러스터 상태 확인**:
-   - `kubectl get nodes` (use_sudo=True)
-   - `kubectl get pods -A` (use_sudo=True)
-   - `kubectl get deployments -A` (use_sudo=True)
+   - execute_host("kubectl get nodes", use_sudo=True)
+   - execute_host("kubectl get pods -A", use_sudo=True)
+   - execute_host("kubectl get deployments -A", use_sudo=True)
+   - execute_host("kubectl get services -A", use_sudo=True)
+   - execute_host("kubectl get ingress -A", use_sudo=True)
+
 2. **문제가 있는 리소스 식별**:
-   - `kubectl get pods -A | grep -v Running` (실행 중이 아닌 Pod 찾기)
-   - `kubectl describe pod <pod-name> -n <namespace>` (문제 Pod 상세 확인)
-   - `kubectl logs <pod-name> -n <namespace> --tail=100` (로그 확인)
-3. **자동 분석 및 해결책 제시**: 문제를 식별한 후 해결 방법을 제안하세요.
+   - execute_host("kubectl get pods -A --field-selector=status.phase!=Running", use_sudo=True)
+   - execute_host("kubectl get pods -A | grep -E 'Error|CrashLoop|Pending'", use_sudo=True)
+   - execute_host("kubectl describe pod <pod-name> -n <namespace>", use_sudo=True)
+   - execute_host("kubectl logs <pod-name> -n <namespace> --tail=100", use_sudo=True)
+   - execute_host("kubectl get events -A --sort-by='.lastTimestamp' | tail -20", use_sudo=True)
+
+3. **리소스 상세 분석**:
+   - execute_host("kubectl top nodes", use_sudo=True)  # 노드 리소스 사용량
+   - execute_host("kubectl top pods -A", use_sudo=True)  # Pod 리소스 사용량
+   - execute_host("kubectl get all -n <namespace>", use_sudo=True)  # 특정 네임스페이스 전체 리소스
+
+4. **자동 분석 및 해결책 제시**: 
+   - 문제를 식별한 후 해결 방법을 제안하세요.
+   - 필요시 YAML 파일 수정이나 리소스 재시작 등의 해결책을 제시하세요.
 
 ## 주의사항
 - 여러 명령어를 실행하여 충분한 정보 수집
