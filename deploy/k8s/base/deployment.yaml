@@ -74,6 +74,8 @@ spec:
         volumeMounts:
         - name: projects
           mountPath: /mnt/projects
+      nodeSelector:
+        kubernetes.io/hostname: mayne-vcn  # Only run on master node where Projects directory exists
       volumes:
       - name: projects
         hostPath:
