@@ -6,7 +6,7 @@ spec:
   hard:
     requests.cpu: "4"
     requests.memory: 8Gi
-    limits.cpu: "8"
+    # limits.cpu: "8"  # Removed to prevent quota enforcement (we removed CPU limits cluster-wide)
     limits.memory: 16Gi
     persistentvolumeclaims: "5"
 
