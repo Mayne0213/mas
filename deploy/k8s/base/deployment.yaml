@@ -70,7 +70,7 @@ spec:
             cpu: "100m"
           limits:
             memory: "1Gi"
-            cpu: "1000m"
+            # cpu: removed to prevent throttling
         volumeMounts:
         - name: projects
           mountPath: /mnt/projects
