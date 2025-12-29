@@ -8,7 +8,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://gitea0213.kro.kr/bluemayne/mas.git
+    repoURL: https://github.com/Mayne0213/mas.git
     targetRevision: main
     path: deploy/k8s/overlays/prod
   destination:
