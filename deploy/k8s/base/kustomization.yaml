@@ -11,6 +11,6 @@ commonLabels:
   app.kubernetes.io/component: platform
 
 images:
-  - name: gitea0213.kro.kr/bluemayne/mas
+  - name: github.com/Mayne0213/mas
     newTag: latest
 
