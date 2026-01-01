@@ -3,18 +3,10 @@ kind: Ingress
 metadata:
   name: mas-ingress
   annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    # WebSocket 지원 (Chainlit UI에 필요)
-    nginx.ingress.kubernetes.io/websocket-services: "mas"
-    # 프록시 타임아웃 설정 (장시간 스트리밍 응답)
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    # 프록시 버퍼링 비활성화 (스트리밍 응답)
-    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    traefik.ingress.kubernetes.io/router.middlewares: authelia-authelia-auth@kubernetescrd
 spec:
-  ingressClassName: haproxy
+  ingressClassName: traefik
   tls:
   - hosts:
     - mas0213.kro.kr

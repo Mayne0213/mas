@@ -16,5 +16,5 @@ commonLabels:
 images:
   - name: ghcr.io/mayne0213/mas
     newName: ghcr.io/mayne0213/mas
-    newTag: main-sha-1aaab71aeeb87c4018501ab4233bbce11aff1871
+    newTag: main-sha-fcc2ebbbe3d47cc347e6907e65882e3eed8d2d32
 
