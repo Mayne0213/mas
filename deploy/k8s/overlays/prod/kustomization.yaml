@@ -14,6 +14,7 @@ commonLabels:
 
 # 이미지 태그 설정 (ArgoCD Image Updater가 자동으로 업데이트)
 images:
-  - name: github.com/Mayne0213/mas
-    newTag: main-sha-004c30bfa872c37dd3da5ad8501589c415807da8
+  - name: ghcr.io/mayne0213/mas
+    newName: ghcr.io/mayne0213/mas
+    newTag: latest
 

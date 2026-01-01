@@ -1,0 +1,146 @@
+name: Build Docker Image
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lowercase repository name
+        id: lowercase
+        run: |
+          echo "repo=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.lowercase.outputs.repo }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-sha-,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/backend
+          file: ./deploy/docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract SHA tag
+        id: extract-tag
+        run: |
+          TAGS="${{ steps.meta.outputs.tags }}"
+          echo "All tags:"
+          echo "$TAGS"
+          echo "---"
+
+          COMMIT_SHA="${{ github.sha }}"
+          BRANCH_NAME="${{ github.ref_name }}"
+          echo "Branch: $BRANCH_NAME"
+
+          SHA_TAG=$(echo "$TAGS" | grep -oE "${BRANCH_NAME}-sha-[a-f0-9]{40}" | head -n 1)
+
+          if [ -z "$SHA_TAG" ]; then
+            SHA_TAG=$(echo "$TAGS" | grep -oE "${BRANCH_NAME}-sha-[a-f0-9]+" | head -n 1)
+          fi
+
+          if [ -z "$SHA_TAG" ]; then
+            SHA_TAG="${BRANCH_NAME}-sha-$COMMIT_SHA"
+          fi
+
+          if [ -z "$SHA_TAG" ]; then
+            echo "ERROR: Failed to extract SHA tag"
+            exit 1
+          fi
+
+          echo "sha-tag=$SHA_TAG" >> $GITHUB_OUTPUT
+          echo "Extracted SHA tag: $SHA_TAG"
+
+      - name: Update kustomization with new image tag
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          SHA_TAG="${{ steps.extract-tag.outputs.sha-tag }}"
+          if [ -z "$SHA_TAG" ]; then
+            echo "ERROR: SHA_TAG is empty"
+            exit 1
+          fi
+
+          BRANCH_NAME="${{ github.ref_name }}"
+          if [ "$BRANCH_NAME" = "main" ]; then
+            OVERLAY="prod"
+          else
+            echo "Unknown branch: $BRANCH_NAME, skipping"
+            exit 0
+          fi
+
+          KUSTOMIZATION_FILE="deploy/k8s/overlays/$OVERLAY/kustomization.yaml"
+
+          if grep -q "images:" "$KUSTOMIZATION_FILE"; then
+            echo "Updating $KUSTOMIZATION_FILE with tag: $SHA_TAG"
+            sed -i "s|newTag:.*|newTag: $SHA_TAG|" "$KUSTOMIZATION_FILE"
+
+            if git diff --quiet; then
+              echo "No changes to commit"
+            else
+              git add "$KUSTOMIZATION_FILE"
+              git commit -m "Update $OVERLAY image to $SHA_TAG"
+              git push
+              echo "Kustomization updated with new image tag: $SHA_TAG"
+            fi
+          else
+            echo "$OVERLAY overlay uses base image, skipping kustomization update"
+          fi
+
+      - name: Display image information
+        run: |
+          echo "Image built and pushed successfully!"
+          echo "Image tags:"
+          echo "${{ steps.meta.outputs.tags }}"
+          echo "SHA tag: ${{ steps.extract-tag.outputs.sha-tag }}"
+          echo "Digest: ${{ steps.build.outputs.digest }}"
