@@ -32,13 +32,6 @@ spec:
             secretKeyRef:
               name: mas-api-keys
               key: anthropic-api-key
-        - name: GROQ_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: mas-api-keys
-              key: groq-api-key
-        - name: GROQ_API_BASE
-          value: "https://api.groq.com/openai/v1"
         # Chainlit uses asyncpg directly (not SQLAlchemy)
         - name: CHAINLIT_DATABASE_URL
           value: "postgresql://bluemayne:$(POSTGRES_PASSWORD)@postgresql-rw.postgresql.svc.cluster.local:5432/mas"
