@@ -19,7 +19,7 @@ spec:
       serviceAccountName: mas
       containers:
       - name: mas
-        image: github.com/Mayne0213/mas:latest
+        image: ghcr.io/mayne0213/mas:latest
         imagePullPolicy: Always
         securityContext:
           privileged: true  # nsenter 사용을 위한 권한
